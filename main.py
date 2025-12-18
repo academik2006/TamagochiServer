@@ -1,0 +1,323 @@
+from telebot import types
+import telebot
+import asyncio
+import time
+from datetime import datetime
+from threading import Thread
+import sqlite3
+from datetime import datetime
+from datetime import timedelta
+from promotions import promotions  
+from api_key import API_TOKEN
+import logging
+from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
+import schedule
+
+
+bot = telebot.TeleBot(API_TOKEN)
+bot.delete_webhook()
+
+logging.basicConfig(level=logging.INFO)  
+logger = logging.getLogger(__name__)
+
+
+def create_db():
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    # Таблица users хранит список зарегистрированных пользователей
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY,
+        username TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+
+    # Таблица characters хранит персонажей и их характеристики
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS characters (
+            character_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            name TEXT,
+            gender TEXT CHECK(gender IN ('male', 'female')),
+            photo BLOB,
+            hunger REAL DEFAULT 100,
+            fatigue REAL DEFAULT 100,
+            entertainment REAL DEFAULT 100,
+            money_needs REAL DEFAULT 100,
+            total_state REAL DEFAULT 100,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(user_id)
+)
+''')
+    conn.commit()
+    conn.close()
+
+async def main():    
+    logger.info("Бот запущен")
+    create_db()    
+   
+  
+
+rules_text = """<b>Как работает магия Декабря: </b>
+
+1. Каждый день кликай на новое окошко.
+2. Лови доброе пожелание, немного улыбок и сюрприз от нас.
+3. Повтори завтра.
+
+Так и дойдём до Нового года — бодро, с верой в чудо и с ощущением, что <b> Всё реально получится! </b>
+"""
+
+conditions_text = """<b> *Внимание, магия скидок! </b> 
+
+Наши промокоды — штучный товар. 
+Если не скопировать правильно, волшебство может не сработать. 
+Срок действия ограничен (вечно живут только мемы). 
+Не совместимы с другими акциями, скидками и оплатой баллами. 
+
+<b> Чудеса не любят конкуренции </b>.
+"""
+
+@bot.message_handler(commands=['start']) #обрабатываем команду старт
+def start_fun(message):        
+    username = message.from_user.first_name 
+    add_user_on_start(message)      
+    welcome_text = f"""
+С наступающим, дорогой друг <b>{username}</b>!. Ты открыл календарь, где декабрь — это целый сериал из 31 серии добра, юмора и подарков.
+
+Каждый день — новое окошко, новое пожелание и новый приз!
+
+Как проверить, что время для викторины пришло? Кнопка "Начать игру" ждет твоего клика.
+
+Но не пытайся открыть будущее: волшебство работает только «сегодня и сейчас» ;).
+
+Готов? Тогда поехали навстречу чудесам! 
+
+<b>Так что не забудь ознакомиться со всеми условиями игры. Желаем удачи!</b>"""   
+    image_path = 'event_cal_cat.png'  
+    with open(image_path, 'rb') as photo_file:
+        bot.send_photo(chat_id=message.chat.id, photo=photo_file, caption=welcome_text, parse_mode="HTML")       
+    
+
+@bot.message_handler(commands=['iaposhka']) #обрабатываем команду iaposhka
+def start_fun(message):   
+   bot.send_message(message.chat.id, f"В списке пользователей бота {len(get_users())} пользователей")
+       
+     
+@bot.message_handler(func=lambda message: message.text == 'Правила игры')
+def handle_game_rules(message):        
+    bot.send_message(message.chat.id, rules_text, parse_mode="HTML")
+    logger.info(f"Бот успешно отправил пользователю {message.chat.id} правила игры")
+
+@bot.message_handler(func=lambda message: message.text == 'Условия акции')
+def handle_promotion_conditions(message):
+    bot.send_message(message.chat.id, conditions_text, parse_mode="HTML")
+    logger.info(f"Бот успешно отправил пользователю {message.chat.id} условия акции")    
+
+def add_user_on_start(message):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    user_id = message.from_user.id
+
+    cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
+
+    if not cursor.fetchone():
+        # Пользователь новый, добавляем в базу        
+        cursor.execute(
+           "INSERT INTO users (user_id, username) VALUES (?, ?)",
+            (user_id, message.from_user.username)
+        )
+        conn.commit()
+        
+        keyboard = telebot.types.ReplyKeyboardMarkup(row_width=2)
+        btn_create_male = telebot.types.KeyboardButton(text="Создать мужчину")
+        btn_create_female = telebot.types.KeyboardButton(text="Создать женщину")
+        keyboard.add(btn_create_male, btn_create_female)
+        bot.send_message(user_id, "Приветствуем тебя!\nВыбери пол своего персонажа:", reply_markup=keyboard)
+        logger.info(f"В базу данных добавлен новый пользователь {user_id}")
+    else:
+        check_character_and_send_status(user_id, cursor)  
+      
+    conn.close()            
+
+def check_character_and_send_status(user_id):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM characters WHERE user_id=?", (user_id,))
+    character_data = cursor.fetchone()
+    
+    if character_data is None:
+        return bot.send_message(user_id, "Ваш персонаж отсутствует.")
+    
+    char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, _ = character_data
+    
+    # Формирование клавиатуры действий
+    buttons = []
+    if gender == 'female':
+        buttons.extend(["Кормление роллами", "Посещение кинотеатра", "Шопинг", "Угощение коктейлем"])
+    else:
+        buttons.extend(["Посещение футбольного матча", "Угощение домашним обедом", "Встреча с работы", "Проведение времени с друзьями"])
+    
+    keyboard = telebot.types.ReplyKeyboardMarkup(row_width=2)
+    for button_text in buttons:
+        keyboard.add(button_text)
+    
+    send_character_image(user_id, char_id, name, gender, hunger, fatigue, entertain, money_need, total_state, keyboard)
+
+def send_character_image(user_id, char_id, name, gender, hunger, fatigue, entertain, money_need, total_state, keyboard=None):
+    img_bytes = draw_character(char_id, name, gender, hunger, fatigue, entertain, money_need, total_state)
+    bio = BytesIO(img_bytes)
+    bio.seek(0)
+    bot.send_photo(user_id, bio, caption=f"{name}\nHunger: {hunger:.0f}%\nFatigue: {fatigue:.0f}%\nEntertainment: {entertain:.0f}%\nMoney Needs: {money_need:.0f}%",
+                  reply_markup=keyboard)
+
+def generate_avatar(gender):
+    width, height = 200, 200
+    img = Image.new('RGB', (width, height), color=(255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype("arial.ttf", size=20)
+    
+    text = f'{gender.capitalize()} Avatar'
+    w, h = draw.textsize(text, font=font)
+    x = (width - w) / 2
+    y = (height - h) / 2
+    draw.text((x,y), text, fill='black', font=font)
+    
+    bio = BytesIO()
+    img.save(bio, format='PNG')
+    return bio
+
+def draw_character(char_id, name, gender, hunger, fatigue, entertain, money_need, total_state):
+    # Генерация изображения персонажа (можно заменить на реальные рендеры или анимации)
+    img = generate_avatar(gender)
+    return img.getvalue()    
+  
+@bot.message_handler(content_types="web_app_data")
+def answer(webAppMes):
+    today = datetime.now().day  # получаем сегодняшний день месяца (целое число)
+    data = webAppMes.web_app_data.data
+    card_number = int(str(data).strip())  # конвертируем в целое число
+    
+    # Проверяем, открыта ли карточка на текущий день
+    if card_number > today:
+        bot.send_message(webAppMes.chat.id, "❗️ Карточка ещё закрыта! Ждите наступления нужной даты.", parse_mode="HTML")
+        return
+
+    # остальная логика остается прежней...
+    found_promotion = next((p for p in promotions if p.get("number") == str(card_number)), None)
+
+    if found_promotion:
+        promo_name = found_promotion.get("name")
+        condition = found_promotion.get("сondition")
+        code = found_promotion.get("promotional_code")
+
+        response_text = (
+            f"🎉 Номер карточки в календаре событий: <b>{data}</b>\n\n"
+            f"🎉 Твоя акция: <b>{promo_name}</b>\n\n"
+            f"✨ Промокод: <code>{code}</code>\n\n"
+            f"👍 Условия акции:\n{condition}"
+        )
+        bot.send_message(webAppMes.chat.id, response_text, parse_mode="HTML")
+        logger.info(f"Бот успешно отправил пользователю {webAppMes.chat.id} условия карточки {card_number} ")
+    else:
+        bot.send_message(webAppMes.chat.id, "❌ Акция не найдена :(", parse_mode="HTML")
+        logger.error(f"Бот сообщил пользователю {webAppMes.chat.id} карточка {card_number} не найдена")
+  
+def get_users():
+    try:
+        with sqlite3.connect('users.db') as conn:
+            cursor = conn.cursor()
+            
+            # Выполняем запрос на выборку всех записей
+            cursor.execute("SELECT user_id, chat_id FROM users")
+            rows = cursor.fetchall()
+            
+            # Формируем список пар 'user_id' и 'chat_id'
+            users = [(row[0]) for row in rows]
+            logger.info(f"Бот сформировал список для ежедневного уведомления в {len(users)} пользователей")            
+            return users
+    except Exception as e:
+        print(f"Произошла ошибка: {e}")
+        logger.error(f"При запросе списка пользователей произошла ошибка: {e}")
+        return []
+
+# Функция для отправки сообщения всем пользователям
+def send_daily_reminder():        
+    dailyReminderText = """
+Просыпайся, герой декабря! 
+<b>Новый день — новое окошко в адвенте от Суши Мастер.</b> 
+Зайди, открой, получи дозу позитива и сюрприз.
+Потому что, кто рано открывает календарь — у того Всё получается"""
+    users = get_users()   # Получаем список пользователей
+    for chat_id in users:
+        try:
+            bot.send_message(chat_id, dailyReminderText, parse_mode="HTML")
+            logger.info(f"Отправлено ежедневное напоминание {chat_id}")
+        except Exception as e:
+            logger.error(f"Произошла ошибка при отправке сообщения пользователю {chat_id}: {e}")
+            print(f"Произошла ошибка при отправке сообщения пользователю {chat_id}: {e}")
+    
+    current_time = datetime.now()
+    print(f"{current_time} - Напоминание отправлено.")
+
+
+# Функция для запуска таймера
+def run_timer():
+    while True:
+        current_time = datetime.now()
+        if current_time.hour == 9 and current_time.minute == 0:  # Время отправки сообщения (09:00)
+            send_daily_reminder()
+        time.sleep(60)  # Проверять каждую минуту        
+
+# Запускаем таймер в отдельном потоке
+timer_thread = Thread(target=run_timer)
+timer_thread.start()
+
+
+def hourly_update_characters():
+    now = datetime.now()
+    five_days_ago = now - timedelta(days=5)
+
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM characters")
+    all_chars = cursor.fetchall()
+    
+    for char_id, user_id, _, _, _, hunger, fatigue, entertain, money_need, total_state, created_at in all_chars:
+        hunger -= 10
+        fatigue -= 5
+        entertain -= 5
+        money_need -= 5
+        
+        new_total_state = sum([hunger, fatigue, entertain, money_need]) / 4
+        
+        # Проверка уровня здоровья
+        if new_total_state <= 20:
+            bot.send_message(user_id, f"Ваш персонаж {char_id} покинул вас :(")
+            cursor.execute("DELETE FROM characters WHERE character_id=?", (char_id,))
+        elif new_total_state <= 30:
+            bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось, вам лучше проверить его состояние!")
+        elif new_total_state <= 50:
+            bot.send_message(user_id, f"Ухудшение состояния персонажа, пожалуйста, уделите внимание своему питомцу!")
+            
+        # Проверка возраста персонажа
+        created_dt = datetime.strptime(created_at.split('.')[0], "%Y-%m-%d %H:%M:%S")
+        if created_dt < five_days_ago:
+            bot.send_message(user_id, f"Поздравляю! Ваш персонаж достиг 5-дневного рубежа и получил специальный приз!")
+            cursor.execute("DELETE FROM characters WHERE character_id=?", (char_id,))
+        
+        cursor.execute("""
+            UPDATE characters SET hunger=?, fatigue=?, entertainment=?, money_needs=?, total_state=? WHERE character_id=?
+        """, (max(hunger, 0), max(fatigue, 0), max(entertain, 0), max(money_need, 0), new_total_state, char_id))
+    
+    conn.commit()
+
+schedule.every().hour.do(hourly_update_characters)
+       
+        
+
+if __name__ == "__main__":
+    asyncio.run(main())
+    bot.infinity_polling()
