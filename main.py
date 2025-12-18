@@ -14,6 +14,10 @@ from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 import schedule
 import random
+from messages import WELCOME_TEXT
+from messages import RULES_TEXT
+from messages import CONDITIONS_TEXT
+
 
 
 bot = telebot.TeleBot(API_TOKEN)
@@ -57,48 +61,12 @@ def create_db():
 
 async def main():    
     logger.info("Бот запущен")
-    create_db()    
-   
-  
+    create_db()     
 
-rules_text = """<b>Как работает магия Декабря: </b>
-
-1. Каждый день кликай на новое окошко.
-2. Лови доброе пожелание, немного улыбок и сюрприз от нас.
-3. Повтори завтра.
-
-Так и дойдём до Нового года — бодро, с верой в чудо и с ощущением, что <b> Всё реально получится! </b>
-"""
-
-conditions_text = """<b> *Внимание, магия скидок! </b> 
-
-Наши промокоды — штучный товар. 
-Если не скопировать правильно, волшебство может не сработать. 
-Срок действия ограничен (вечно живут только мемы). 
-Не совместимы с другими акциями, скидками и оплатой баллами. 
-
-<b> Чудеса не любят конкуренции </b>.
-"""
 
 @bot.message_handler(commands=['start']) #обрабатываем команду старт
-def start_fun(message):        
-    username = message.from_user.first_name 
-    add_user_on_start(message)      
-    welcome_text = f"""
-С наступающим, дорогой друг <b>{username}</b>!. Ты открыл календарь, где декабрь — это целый сериал из 31 серии добра, юмора и подарков.
-
-Каждый день — новое окошко, новое пожелание и новый приз!
-
-Как проверить, что время для викторины пришло? Кнопка "Начать игру" ждет твоего клика.
-
-Но не пытайся открыть будущее: волшебство работает только «сегодня и сейчас» ;).
-
-Готов? Тогда поехали навстречу чудесам! 
-
-<b>Так что не забудь ознакомиться со всеми условиями игры. Желаем удачи!</b>"""   
-    image_path = 'event_cal_cat.png'  
-    with open(image_path, 'rb') as photo_file:
-        bot.send_photo(chat_id=message.chat.id, photo=photo_file, caption=welcome_text, parse_mode="HTML")       
+def start_fun(message):            
+    add_user_on_start(message)       
     
 
 @bot.message_handler(commands=['iaposhka']) #обрабатываем команду iaposhka
@@ -107,42 +75,65 @@ def start_fun(message):
        
      
 @bot.message_handler(func=lambda message: message.text == 'Правила игры')
-def handle_game_rules(message):        
-    bot.send_message(message.chat.id, rules_text, parse_mode="HTML")
+def handle_game_rules(message):            
+    bot.send_message(message.chat.id, RULES_TEXT, parse_mode="HTML")
     logger.info(f"Бот успешно отправил пользователю {message.chat.id} правила игры")
 
 @bot.message_handler(func=lambda message: message.text == 'Условия акции')
 def handle_promotion_conditions(message):
-    bot.send_message(message.chat.id, conditions_text, parse_mode="HTML")
+    bot.send_message(message.chat.id, CONDITIONS_TEXT, parse_mode="HTML")
     logger.info(f"Бот успешно отправил пользователю {message.chat.id} условия акции")    
 
 def add_user_on_start(message):
     conn = sqlite3.connect('users.db')
     cursor = conn.cursor()
     user_id = message.from_user.id
-
+    
+    
     cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
 
     if not cursor.fetchone():
+        username = message.from_user.first_name 
+        image_path = 'event_cal_cat.png'  
+        welcome_text = WELCOME_TEXT.format(username=username)
+        with open(image_path, 'rb') as photo_file:
+            bot.send_photo(chat_id=message.chat.id, photo=photo_file, caption=welcome_text, parse_mode="HTML")       
         # Пользователь новый, добавляем в базу        
         cursor.execute(
            "INSERT INTO users (user_id, username) VALUES (?, ?)",
             (user_id, message.from_user.username)
         )
         conn.commit()
-        
-        keyboard = telebot.types.ReplyKeyboardMarkup(row_width=2)
-        btn_create_male = telebot.types.KeyboardButton(text="Создать мужчину")
-        btn_create_female = telebot.types.KeyboardButton(text="Создать женщину")
-        keyboard.add(btn_create_male, btn_create_female)
-        bot.send_message(user_id, "Приветствуем тебя!\nВыбери пол своего персонажа:", reply_markup=keyboard)
+
+        bot.send_message(user_id, "Приветствуем тебя!\n Изучи правила и условия акции и создавай персонажа:", reply_markup=create_keyboard_for_new_user())        
+                
         logger.info(f"В базу данных добавлен новый пользователь {user_id}")
     else:
         check_character_and_send_status(user_id)  
       
     conn.close()  
 
-   
+def create_keyboard_for_choose_gender ():
+    keyboard = telebot.types.ReplyKeyboardMarkup(row_width=2)
+    btn_create_male = telebot.types.KeyboardButton(text="Создать мужчину")
+    btn_create_female = telebot.types.KeyboardButton(text="Создать женщину")
+    keyboard.add(btn_create_male, btn_create_female)
+    return keyboard
+
+def create_keyboard_for_new_user():
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    buttons = [
+        'Правила игры',
+        'Условия акции',
+        'Создать персонажа',
+    ]
+
+    for text in buttons:
+        btn = types.KeyboardButton(text=text)
+        keyboard.add(btn)
+
+    return keyboard  
+  
 
 @bot.message_handler(func=lambda m: True)
 def handle_buttons(message):
@@ -152,6 +143,8 @@ def handle_buttons(message):
     if text in ["создать мужчину", "создать женщину"]:
         gender = "male" if text == "создать мужчину" else "female"
         create_character(user_id, gender)
+    elif text.startswith("создать персонажа"):
+        bot.send_message(user_id, "Выбери пол своего персонажа:", reply_markup=create_keyboard_for_choose_gender())        
     elif text.startswith("кормление"):
         update_character_parameter(user_id, 'hunger', +10)
     elif text.startswith("посещение"):
@@ -167,9 +160,7 @@ def handle_buttons(message):
     elif text.startswith("предоставление возможности"):
         update_character_parameter(user_id, 'entertainment', +5)
     else:
-        pass
-    
-    check_character_and_send_status(user_id)
+        pass        
 
 def create_character(user_id, gender):
     conn = sqlite3.connect('users.db')
