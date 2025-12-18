@@ -13,6 +13,7 @@ import logging
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 import schedule
+import random
 
 
 bot = telebot.TeleBot(API_TOKEN)
@@ -137,9 +138,63 @@ def add_user_on_start(message):
         bot.send_message(user_id, "Приветствуем тебя!\nВыбери пол своего персонажа:", reply_markup=keyboard)
         logger.info(f"В базу данных добавлен новый пользователь {user_id}")
     else:
-        check_character_and_send_status(user_id, cursor)  
+        check_character_and_send_status(user_id)  
       
-    conn.close()            
+    conn.close()  
+
+   
+
+@bot.message_handler(func=lambda m: True)
+def handle_buttons(message):
+    user_id = message.from_user.id
+    text = message.text.lower()
+    
+    if text in ["создать мужчину", "создать женщину"]:
+        gender = "male" if text == "создать мужчину" else "female"
+        create_character(user_id, gender)
+    elif text.startswith("кормление"):
+        update_character_parameter(user_id, 'hunger', +10)
+    elif text.startswith("посещение"):
+        update_character_parameter(user_id, 'entertainment', +5)
+    elif text.startswith("шопинг") or text.startswith("провести время с друзьями"):
+        update_character_parameter(user_id, 'money_needs', +5)
+    elif text.startswith("угощение"):
+        update_character_parameter(user_id, 'entertainment', +5)
+    elif text.startswith("перевод денег"):
+        update_character_parameter(user_id, 'money_needs', +5)
+    elif text.startswith("встреча с работы"):
+        update_character_parameter(user_id, 'entertainment', +5)
+    elif text.startswith("предоставление возможности"):
+        update_character_parameter(user_id, 'entertainment', +5)
+    else:
+        pass
+    
+    check_character_and_send_status(user_id)
+
+def create_character(user_id, gender):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    # Генерируем стандартный аватар
+    img = generate_avatar(gender)
+    bio = img.getvalue()  # Получаем байтовое представление изображения
+    
+    # Добавляем персонажа в базу
+    name = f"{gender.capitalize()} #{random.randint(1000, 9999)}"
+    cursor.execute("""
+        INSERT INTO characters (user_id, name, gender, photo) VALUES (?,?,?,?)
+    """, (user_id, name, gender, bio))
+    conn.commit()
+    
+    bot.send_message(user_id, f"Персонаж {name} успешно создан!")
+    check_character_and_send_status(user_id)  
+
+def update_character_parameter(user_id, param_name, value_change):
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    cursor.execute(f"""
+        UPDATE characters SET {param_name}=({param_name}+?) WHERE user_id=?
+    """, (value_change, user_id))
+    conn.commit()
 
 def check_character_and_send_status(user_id):
     conn = sqlite3.connect('users.db')
@@ -179,7 +234,7 @@ def generate_avatar(gender):
     font = ImageFont.truetype("arial.ttf", size=20)
     
     text = f'{gender.capitalize()} Avatar'
-    w, h = draw.textsize(text, font=font)
+    w, h = font.getbbox(text)[2:]  # Возвращает ширину и высоту текста
     x = (width - w) / 2
     y = (height - h) / 2
     draw.text((x,y), text, fill='black', font=font)
@@ -315,6 +370,7 @@ def hourly_update_characters():
     conn.commit()
 
 schedule.every().hour.do(hourly_update_characters)
+
        
         
 
