@@ -12,13 +12,9 @@ from api_key import API_TOKEN
 import logging
 from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
-import schedule
 import random
-from messages import WELCOME_TEXT
-from messages import RULES_TEXT
-from messages import CONDITIONS_TEXT
-
-
+from messages import *
+from db_utils import *
 
 bot = telebot.TeleBot(API_TOKEN)
 bot.delete_webhook()
@@ -26,38 +22,6 @@ bot.delete_webhook()
 logging.basicConfig(level=logging.INFO)  
 logger = logging.getLogger(__name__)
 
-
-def create_db():
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
-    # Таблица users хранит список зарегистрированных пользователей
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-        user_id INTEGER PRIMARY KEY,
-        username TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        ''')
-
-    # Таблица characters хранит персонажей и их характеристики
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS characters (
-            character_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            name TEXT,
-            gender TEXT CHECK(gender IN ('male', 'female')),
-            photo BLOB,
-            hunger REAL DEFAULT 100,
-            fatigue REAL DEFAULT 100,
-            entertainment REAL DEFAULT 100,
-            money_needs REAL DEFAULT 100,
-            total_state REAL DEFAULT 100,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(user_id) REFERENCES users(user_id)
-)
-''')
-    conn.commit()
-    conn.close()
 
 async def main():    
     logger.info("Бот запущен")
@@ -84,34 +48,21 @@ def handle_promotion_conditions(message):
     bot.send_message(message.chat.id, CONDITIONS_TEXT, parse_mode="HTML")
     logger.info(f"Бот успешно отправил пользователю {message.chat.id} условия акции")    
 
-def add_user_on_start(message):
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
+def add_user_on_start(message):        
     user_id = message.from_user.id
-    
-    
-    cursor.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
-
-    if not cursor.fetchone():
+    result = execute_query("SELECT * FROM users WHERE user_id=?", (user_id,))
+    if not result:
         username = message.from_user.first_name 
         image_path = 'event_cal_cat.png'  
         welcome_text = WELCOME_TEXT.format(username=username)
         with open(image_path, 'rb') as photo_file:
             bot.send_photo(chat_id=message.chat.id, photo=photo_file, caption=welcome_text, parse_mode="HTML")       
         # Пользователь новый, добавляем в базу        
-        cursor.execute(
-           "INSERT INTO users (user_id, username) VALUES (?, ?)",
-            (user_id, message.from_user.username)
-        )
-        conn.commit()
-
-        bot.send_message(user_id, "Приветствуем тебя!\n Изучи правила и условия акции и создавай персонажа:", reply_markup=create_keyboard_for_new_user())        
-                
+        add_user_to_database(user_id, message.from_user.username)              
+        bot.send_message(user_id, "Приветствуем тебя!\n Изучи правила и условия акции и создавай персонажа:", reply_markup=create_keyboard_for_new_user())                        
         logger.info(f"В базу данных добавлен новый пользователь {user_id}")
     else:
-        check_character_and_send_status(user_id)  
-      
-    conn.close()  
+        check_character_and_send_status(user_id)    
 
 def create_keyboard_for_choose_gender ():
     keyboard = telebot.types.ReplyKeyboardMarkup(row_width=2)
@@ -162,39 +113,29 @@ def handle_buttons(message):
     else:
         pass        
 
-def create_character(user_id, gender):
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
+def create_character(user_id, gender):    
     # Генерируем стандартный аватар
     img = generate_avatar(gender)
     bio = img.getvalue()  # Получаем байтовое представление изображения
     
     # Добавляем персонажа в базу
     name = f"{gender.capitalize()} #{random.randint(1000, 9999)}"
-    cursor.execute("""
-        INSERT INTO characters (user_id, name, gender, photo) VALUES (?,?,?,?)
-    """, (user_id, name, gender, bio))
-    conn.commit()
+    add_character_to_database(user_id, name, gender, bio)    
     
     bot.send_message(user_id, f"Персонаж {name} успешно создан!")
     check_character_and_send_status(user_id)  
 
 def update_character_parameter(user_id, param_name, value_change):
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
-    cursor.execute(f"""
-        UPDATE characters SET {param_name}=({param_name}+?) WHERE user_id=?
-    """, (value_change, user_id))
-    conn.commit()
+    update_character_parameter(value_change, user_id)    
 
 def check_character_and_send_status(user_id):
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM characters WHERE user_id=?", (user_id,))
-    character_data = cursor.fetchone()
+    result = execute_query("SELECT * FROM characters WHERE user_id=?", (user_id,))
     
-    if character_data is None:
+    # Проверяем, есть ли результат вообще
+    if not result or len(result) == 0:
         return bot.send_message(user_id, "Ваш персонаж отсутствует.")
+    
+    character_data = result[0]
     
     char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, _ = character_data
     
@@ -237,50 +178,15 @@ def generate_avatar(gender):
 def draw_character(char_id, name, gender, hunger, fatigue, entertain, money_need, total_state):
     # Генерация изображения персонажа (можно заменить на реальные рендеры или анимации)
     img = generate_avatar(gender)
-    return img.getvalue()    
-  
-@bot.message_handler(content_types="web_app_data")
-def answer(webAppMes):
-    today = datetime.now().day  # получаем сегодняшний день месяца (целое число)
-    data = webAppMes.web_app_data.data
-    card_number = int(str(data).strip())  # конвертируем в целое число
-    
-    # Проверяем, открыта ли карточка на текущий день
-    if card_number > today:
-        bot.send_message(webAppMes.chat.id, "❗️ Карточка ещё закрыта! Ждите наступления нужной даты.", parse_mode="HTML")
-        return
+    return img.getvalue()      
 
-    # остальная логика остается прежней...
-    found_promotion = next((p for p in promotions if p.get("number") == str(card_number)), None)
-
-    if found_promotion:
-        promo_name = found_promotion.get("name")
-        condition = found_promotion.get("сondition")
-        code = found_promotion.get("promotional_code")
-
-        response_text = (
-            f"🎉 Номер карточки в календаре событий: <b>{data}</b>\n\n"
-            f"🎉 Твоя акция: <b>{promo_name}</b>\n\n"
-            f"✨ Промокод: <code>{code}</code>\n\n"
-            f"👍 Условия акции:\n{condition}"
-        )
-        bot.send_message(webAppMes.chat.id, response_text, parse_mode="HTML")
-        logger.info(f"Бот успешно отправил пользователю {webAppMes.chat.id} условия карточки {card_number} ")
-    else:
-        bot.send_message(webAppMes.chat.id, "❌ Акция не найдена :(", parse_mode="HTML")
-        logger.error(f"Бот сообщил пользователю {webAppMes.chat.id} карточка {card_number} не найдена")
   
 def get_users():
-    try:
-        with sqlite3.connect('users.db') as conn:
-            cursor = conn.cursor()
-            
+    try:                                
             # Выполняем запрос на выборку всех записей
-            cursor.execute("SELECT user_id, chat_id FROM users")
-            rows = cursor.fetchall()
-            
+            result = execute_query("SELECT user_id, chat_id FROM users")                        
             # Формируем список пар 'user_id' и 'chat_id'
-            users = [(row[0]) for row in rows]
+            users = [(row[0]) for row in result]
             logger.info(f"Бот сформировал список для ежедневного уведомления в {len(users)} пользователей")            
             return users
     except Exception as e:
@@ -312,9 +218,12 @@ def send_daily_reminder():
 def run_timer():
     while True:
         current_time = datetime.now()
-        if current_time.hour == 9 and current_time.minute == 0:  # Время отправки сообщения (09:00)
-            send_daily_reminder()
-        time.sleep(60)  # Проверять каждую минуту        
+                        
+        # Выбираем диапазон часов, в течение которого будем обновлять персонажей
+        if 9 <= current_time.hour <= 16 and current_time.minute == 0:
+            hourly_update_characters()
+        
+        time.sleep(60)  # Проверяем каждую минуту      
 
 # Запускаем таймер в отдельном потоке
 timer_thread = Thread(target=run_timer)
@@ -324,12 +233,9 @@ timer_thread.start()
 def hourly_update_characters():
     now = datetime.now()
     five_days_ago = now - timedelta(days=5)
-
-    conn = sqlite3.connect('users.db')
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT * FROM characters")
-    all_chars = cursor.fetchall()
+        
+    result = execute_query("SELECT * FROM characters")
+    all_chars = result
     
     for char_id, user_id, _, _, _, hunger, fatigue, entertain, money_need, total_state, created_at in all_chars:
         hunger -= 10
@@ -342,7 +248,7 @@ def hourly_update_characters():
         # Проверка уровня здоровья
         if new_total_state <= 20:
             bot.send_message(user_id, f"Ваш персонаж {char_id} покинул вас :(")
-            cursor.execute("DELETE FROM characters WHERE character_id=?", (char_id,))
+            delete_character_from_db(char_id)            
         elif new_total_state <= 30:
             bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось, вам лучше проверить его состояние!")
         elif new_total_state <= 50:
@@ -352,18 +258,10 @@ def hourly_update_characters():
         created_dt = datetime.strptime(created_at.split('.')[0], "%Y-%m-%d %H:%M:%S")
         if created_dt < five_days_ago:
             bot.send_message(user_id, f"Поздравляю! Ваш персонаж достиг 5-дневного рубежа и получил специальный приз!")
-            cursor.execute("DELETE FROM characters WHERE character_id=?", (char_id,))
+            delete_character_from_db(char_id)            
         
-        cursor.execute("""
-            UPDATE characters SET hunger=?, fatigue=?, entertainment=?, money_needs=?, total_state=? WHERE character_id=?
-        """, (max(hunger, 0), max(fatigue, 0), max(entertain, 0), max(money_need, 0), new_total_state, char_id))
-    
-    conn.commit()
-
-schedule.every().hour.do(hourly_update_characters)
-
-       
-        
+        update_character_stats(max(hunger, 0), max(fatigue, 0), max(entertain, 0), max(money_need, 0), new_total_state, char_id)        
+           
 
 if __name__ == "__main__":
     asyncio.run(main())
