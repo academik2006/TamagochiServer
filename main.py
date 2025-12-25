@@ -4,8 +4,6 @@ import asyncio
 import time
 from datetime import datetime
 from threading import Thread
-import sqlite3
-from datetime import datetime
 from datetime import timedelta
 from promotions import promotions  
 from api_key import API_TOKEN
@@ -59,26 +57,31 @@ def add_user_on_start(message):
             bot.send_photo(chat_id=message.chat.id, photo=photo_file, caption=welcome_text, parse_mode="HTML")       
         # Пользователь новый, добавляем в базу        
         add_user_to_database(user_id, message.from_user.username)              
-        bot.send_message(user_id, "Приветствуем тебя!\n Изучи правила и условия акции и создавай персонажа:", reply_markup=create_keyboard_for_new_user())                        
+        bot.send_message(user_id, "Приветствуем тебя!\n Изучи правила и условия акции и создавай персонажа", reply_markup=create_keyboard_for_new_user())                        
         logger.info(f"В базу данных добавлен новый пользователь {user_id}")
     else:
         check_character_and_send_status(user_id)    
 
 def create_keyboard_for_choose_gender ():
-    keyboard = telebot.types.ReplyKeyboardMarkup(row_width=2)
-    btn_create_male = telebot.types.KeyboardButton(text="Создать мужчину")
-    btn_create_female = telebot.types.KeyboardButton(text="Создать женщину")
-    keyboard.add(btn_create_male, btn_create_female)
-    return keyboard
+
+    buttons = [
+        'Мужской',
+        'Женский'        
+    ]
+    return create_keyboard (buttons)    
 
 def create_keyboard_for_new_user():
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+
     buttons = [
         'Правила игры',
         'Условия акции',
         'Создать персонажа',
     ]
+    return create_keyboard (buttons)
+    
 
+def create_keyboard(buttons):
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)    
     for text in buttons:
         btn = types.KeyboardButton(text=text)
         keyboard.add(btn)
@@ -91,15 +94,15 @@ def handle_buttons(message):
     user_id = message.from_user.id
     text = message.text.lower()
     
-    if text in ["создать мужчину", "создать женщину"]:
-        gender = "male" if text == "создать мужчину" else "female"
+    if text in ["мужской", "женский"]:
+        gender = "male" if text == "мужской" else "female"
         create_character(user_id, gender)
     elif text.startswith("создать персонажа"):
         bot.send_message(user_id, "Выбери пол своего персонажа:", reply_markup=create_keyboard_for_choose_gender())        
     elif text.startswith("кормление"):
         update_character_parameter(user_id, 'hunger', +10)
     elif text.startswith("посещение"):
-        update_character_parameter(user_id, 'entertainment', +5)
+        update_character_parameter(user_id, 'entertainment', 5)
     elif text.startswith("шопинг") or text.startswith("провести время с друзьями"):
         update_character_parameter(user_id, 'money_needs', +5)
     elif text.startswith("угощение"):
@@ -124,9 +127,6 @@ def create_character(user_id, gender):
     
     bot.send_message(user_id, f"Персонаж {name} успешно создан!")
     check_character_and_send_status(user_id)  
-
-def update_character_parameter(user_id, param_name, value_change):
-    update_character_parameter(value_change, user_id)    
 
 def check_character_and_send_status(user_id):
     result = execute_query("SELECT * FROM characters WHERE user_id=?", (user_id,))

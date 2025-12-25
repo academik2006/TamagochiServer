@@ -70,7 +70,7 @@ def update_character_parameter(user_id, param_name, value_change):
     query = f"""
         UPDATE characters SET {param_name}=({param_name}+?) WHERE user_id=?
     """
-    execute_query(query, (value_change, user_id))    
+    execute_query(query, (value_change, user_id)) 
 
 def delete_character_from_db(char_id):
     """
