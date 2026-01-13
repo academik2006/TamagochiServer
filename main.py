@@ -32,13 +32,9 @@ async def main():
 
 
 @bot.message_handler(commands=['start']) #обрабатываем команду старт
-def start_fun(message):            
-    add_user_on_start(message)       
-    
-
-@bot.message_handler(commands=['iaposhka']) #обрабатываем команду iaposhka
-def start_fun(message):   
-   bot.send_message(message.chat.id, f"В списке пользователей бота {len(get_users())} пользователей")
+def start_fun(message):
+    logger.info(f"Сработала команда Start")     
+    add_user_on_start(message)    
        
      
 @bot.message_handler(func=lambda message: message.text == 'Правила игры')
@@ -64,7 +60,7 @@ def add_user_on_start(message):
         add_user_to_database(user_id, message.from_user.username)              
         bot.send_message(user_id, "Приветствуем тебя!\n Изучи правила и условия акции и создавай персонажа", reply_markup=create_keyboard_for_new_user())                        
         logger.info(f"В базу данных добавлен новый пользователь {user_id}")
-    else:
+    else:        
         check_character_and_send_status(user_id)    
 
 
@@ -93,6 +89,13 @@ def create_keyboard_for_new_user():
         'Создать персонажа',
     ]
     return create_keyboard (buttons, False)
+
+def create_keyboard_for_continue():
+
+    buttons = [
+        'Навестить персонажа'        
+    ]
+    return create_keyboard (buttons, False)
     
 
 def create_keyboard(buttons, one_time):
@@ -116,6 +119,9 @@ def handle_buttons(message):
         bot.register_next_step_handler(message, process_character_name)
     elif text.startswith("создать персонажа"):        
         bot.send_message(user_id, "Выбери пол своего персонажа", reply_markup=create_keyboard_for_choose_gender())        
+    elif text.startswith("навестить персонажа"):
+        bot.send_message(user_id, "Вернулся голубчик")        
+        check_character_and_send_status(user_id)
     elif text.startswith("кормление"):
         ugrade_character_parameter_and_show_new_avatar(user_id, 'hunger', +10)        
     elif text.startswith("посещение"):
@@ -305,89 +311,67 @@ def send_character_image(user_id, char_id, name, gender, hunger, fatigue, entert
     )
     
     # Отправляем изображение
-    bot.send_photo(user_id, bio, caption=caption, reply_markup=keyboard)      
+    bot.send_photo(user_id, bio, caption=caption, reply_markup=keyboard)     
 
-  
-def get_users():
-    try:                                
-            # Выполняем запрос на выборку всех записей
-            result = execute_query("SELECT user_id, chat_id FROM users")                        
-            # Формируем список пар 'user_id' и 'chat_id'
-            users = [(row[0]) for row in result]
-            logger.info(f"Бот сформировал список для ежедневного уведомления в {len(users)} пользователей")            
-            return users
-    except Exception as e:
-        print(f"Произошла ошибка: {e}")
-        logger.error(f"При запросе списка пользователей произошла ошибка: {e}")
-        return []
-
-# Функция для отправки сообщения всем пользователям
-def send_daily_reminder():        
-    dailyReminderText = """
-Просыпайся, герой декабря! 
-<b>Новый день — новое окошко в адвенте от Суши Мастер.</b> 
-Зайди, открой, получи дозу позитива и сюрприз.
-Потому что, кто рано открывает календарь — у того Всё получается"""
-    users = get_users()   # Получаем список пользователей
-    for chat_id in users:
-        try:
-            bot.send_message(chat_id, dailyReminderText, parse_mode="HTML")
-            logger.info(f"Отправлено ежедневное напоминание {chat_id}")
-        except Exception as e:
-            logger.error(f"Произошла ошибка при отправке сообщения пользователю {chat_id}: {e}")
-            print(f"Произошла ошибка при отправке сообщения пользователю {chat_id}: {e}")
-    
-    current_time = datetime.now()
-    print(f"{current_time} - Напоминание отправлено.")
-
-
-# Функция для запуска таймера
-def run_timer():
-    while True:
-        current_time = datetime.now()
-                        
-        # Выбираем диапазон часов, в течение которого будем обновлять персонажей
-        if 9 <= current_time.hour <= 16 and current_time.minute == 0:
-            hourly_update_characters()
-        
-        time.sleep(60)  # Проверяем каждую минуту      
-
-# Запускаем таймер в отдельном потоке
-timer_thread = Thread(target=run_timer)
-timer_thread.start()
-
-
-def hourly_update_characters():
-    now = datetime.now()
-    five_days_ago = now - timedelta(days=5)
+def hourly_update_characters():   
         
     result = execute_query("SELECT * FROM characters")
     all_chars = result
-    
-    for char_id, user_id, _, _, _, hunger, fatigue, entertain, money_need, total_state, created_at in all_chars:
+        
+    for char_id, user_id, _, name, _, hunger, fatigue, entertain, money_need, total_state, created_at in all_chars:
         hunger -= 10
         fatigue -= 5
         entertain -= 5
         money_need -= 5
         
         new_total_state = sum([hunger, fatigue, entertain, money_need]) / 4
+        logger.info(f"Результат расчета состояния {new_total_state} - {name} - {char_id} - {hunger} - {fatigue} - {entertain} - {money_need}")
+        update_character_stats(max(hunger,0), max(fatigue,0), max(entertain,0), max(money_need,0), max(new_total_state,0), char_id)     
+        check_total_state(user_id,char_id,name,max(new_total_state,0))        
+        check_character_old(user_id, char_id, created_at)                                          
         
-        # Проверка уровня здоровья
+        logger.info(f"Запущена функция обновления статистики персонажа в БД для {char_id} - {new_total_state}")
+
+def check_total_state(user_id, char_id, name, new_total_state):
+    # Проверка уровня здоровья
         if new_total_state <= 20:
-            bot.send_message(user_id, f"Ваш персонаж {char_id} покинул вас :(")
+            bot.send_message(user_id, f"Ваш персонаж {name} покинул вас :(")
             delete_character_from_db(char_id)            
-        elif new_total_state <= 30:
-            bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось, вам лучше проверить его состояние!")
+        elif new_total_state <= 30:            
+            bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось до {new_total_state}, вам лучше проверить его состояние!", reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
         elif new_total_state <= 50:
-            bot.send_message(user_id, f"Ухудшение состояния персонажа, пожалуйста, уделите внимание своему питомцу!")
-            
-        # Проверка возраста персонажа
+            bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось до {new_total_state}, вам лучше проверить его состояние!", reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
+
+def check_character_old (user_id, char_id, created_at):
+    # Проверка возраста персонажа
+        now = datetime.now()
+        five_days_ago = now - timedelta(days=5)
         created_dt = datetime.strptime(created_at.split('.')[0], "%Y-%m-%d %H:%M:%S")
         if created_dt < five_days_ago:
             bot.send_message(user_id, f"Поздравляю! Ваш персонаж достиг 5-дневного рубежа и получил специальный приз!")
-            delete_character_from_db(char_id)            
+            delete_character_from_db(char_id)             
+            
+
+# Функция для запуска таймера
+def run_timer():
+    while True:
+        current_time = datetime.now()
+
+        #send_daily_reminder()
+        #hourly_update_characters()
+                        
+        # Выбираем диапазон часов, в течение которого будем обновлять персонажей
+        #if 9 <= current_time.hour <= 16 and current_time.minute == 0:
+        #    send_daily_reminder()
+        #    hourly_update_characters()
+        hourly_update_characters()
         
-        update_character_stats(max(hunger, 0), max(fatigue, 0), max(entertain, 0), max(money_need, 0), new_total_state, char_id)        
+        time.sleep(20)  # Проверяем каждую минуту      
+
+# Запускаем таймер в отдельном потоке
+timer_thread = Thread(target=run_timer)
+timer_thread.start()
+  
            
 
 if __name__ == "__main__":

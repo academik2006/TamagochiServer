@@ -5,12 +5,12 @@ def connect_db():
 
 def execute_query(query, params=None):
     """
-    Выполняет SQL-запрос и возвращает результат (для SELECT).
-    
+    Выполняет SQL-запрос и возвращает результат (для SELECT).   
     :param query: строка с SQL-запросом
     :param params: кортеж с параметрами для подставления в запрос
     :return: список кортежей с результатами (если применимо)
     """
+    
     conn = connect_db()
     result = []
     try:
@@ -81,22 +81,11 @@ def delete_character_from_db(char_id):
     query = "DELETE FROM characters WHERE character_id=?"
     execute_query(query, (char_id,))    
 
-def update_character_stats(char_id, hunger, fatigue, entertainment, money_needs, total_state):
-    """
-    Обновляет характеристики персонажа в базе данных.
-    
-    :param char_id: Уникальный идентификатор персонажа
-    :param hunger: Уровень голода
-    :param fatigue: Уровень усталости
-    :param entertainment: Уровень развлечения
-    :param money_needs: Потребность в финансах
-    :param total_state: Общий показатель состояния
-    """
+def update_character_stats(hunger, fatigue, entertain, money_need, new_total_state, char_id):    
     query = """
         UPDATE characters SET hunger=?, fatigue=?, entertainment=?, money_needs=?, total_state=? WHERE character_id=?
-    """
-    # Ограничиваем значения характеристик неотрицательными числами
-    execute_query(query, (max(hunger, 0), max(fatigue, 0), max(entertainment, 0), max(money_needs, 0), total_state, char_id))
+    """    
+    execute_query(query, (hunger, fatigue, entertain, money_need, new_total_state, char_id))
 
 
 def close_connection(conn):    
