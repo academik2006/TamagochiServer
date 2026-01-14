@@ -15,7 +15,7 @@ from io import BytesIO
 import random
 from messages import *
 from db_utils import *
-
+from file_work_utils import *
 bot = telebot.TeleBot(API_TOKEN)
 bot.delete_webhook()
 
@@ -29,6 +29,10 @@ user_data = {}
 async def main():    
     logger.info("Бот запущен")
     create_db()     
+    try:
+        set_global_promo_map (await readFileToMap())                    
+    except Exception as e:
+        print(f"Ошибка: {e}")
 
 
 @bot.message_handler(commands=['start']) #обрабатываем команду старт
@@ -348,22 +352,19 @@ def check_character_old (user_id, char_id, created_at):
         five_days_ago = now - timedelta(days=5)
         created_dt = datetime.strptime(created_at.split('.')[0], "%Y-%m-%d %H:%M:%S")
         if created_dt < five_days_ago:
-            bot.send_message(user_id, f"Поздравляю! Ваш персонаж достиг 5-дневного рубежа и получил специальный приз!")
-            delete_character_from_db(char_id)             
+            delete_character_from_db(char_id)
+            element=getPromo()
+            bot.send_message(user_id, f"Твой промокод {element}")
+            bot.send_message(user_id, f"Поздравляю! Ваш персонаж достиг 5-дневного рубежа и получил специальный приз!", reply_markup=create_keyboard_for_new_user(), parse_mode="HTML")   
             
 
 # Функция для запуска таймера
 def run_timer():
     while True:
-        current_time = datetime.now()
-
-        #send_daily_reminder()
-        #hourly_update_characters()
-                        
+        current_time = datetime.now()       
         # Выбираем диапазон часов, в течение которого будем обновлять персонажей
         #if 9 <= current_time.hour <= 16 and current_time.minute == 0:
-        #    send_daily_reminder()
-        #    hourly_update_characters()
+        #   hourly_update_characters()
         hourly_update_characters()
         
         time.sleep(20)  # Проверяем каждую минуту      
