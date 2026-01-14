@@ -174,23 +174,16 @@ def process_user_photo(message):
     if message.content_type != 'photo':
         bot.reply_to(message, "Это не фотография. Пожалуйста, отправьте фото.")
         return
-    
+
     # Берём самую большую версию фотографии
     file_info = bot.get_file(message.photo[-1].file_id)
     downloaded_file = bot.download_file(file_info.file_path)
-    
-    # Компрессия изображения до 150х150 пикселей
-    from PIL import Image
-    image = Image.open(io.BytesIO(downloaded_file)).resize((150, 150))
-    compressed_image_bytes = io.BytesIO()
-    image.save(compressed_image_bytes, format='PNG')  # Сохраняем сжатое изображение в памяти
-    compressed_image_bytes.seek(0)
-    
-    # Сохраняем изображение в словаре user_data
-    user_data[message.chat.id]['photo'] = compressed_image_bytes.read()
+
+    # Сохраняем оригинальное изображение в словаре user_data
+    user_data[message.chat.id]['photo'] = downloaded_file
     bot.send_message(message.chat.id, "Фотография принята.", reply_markup=types.ReplyKeyboardRemove())
     # Переходим к созданию персонажа
-    create_character(message.chat.id)   
+    create_character(message.chat.id)
 
 @bot.callback_query_handler(func=lambda call: call.data == 'select_standard')
 def handle_select_standard(call):
@@ -322,7 +315,7 @@ def hourly_update_characters():
     result = execute_query("SELECT * FROM characters")
     all_chars = result
         
-    for char_id, user_id, _, name, _, hunger, fatigue, entertain, money_need, total_state, created_at in all_chars:
+    for char_id, user_id, name, gender, _, hunger, fatigue, entertain, money_need, total_state, created_at in all_chars:
         hunger -= 10
         fatigue -= 5
         entertain -= 5
@@ -338,9 +331,9 @@ def hourly_update_characters():
 
 def check_total_state(user_id, char_id, name, new_total_state):
     # Проверка уровня здоровья
-        if new_total_state <= 20:
-            bot.send_message(user_id, f"Ваш персонаж {name} покинул вас :(")
-            delete_character_from_db(char_id)            
+        if new_total_state <= 20:            
+            delete_character_from_db(char_id)
+            bot.send_message(user_id, f"Ваш персонаж {name} покинул Вас :(", reply_markup=create_keyboard_for_new_user(), parse_mode="HTML")
         elif new_total_state <= 30:            
             bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось до {new_total_state}, вам лучше проверить его состояние!", reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
         elif new_total_state <= 50:
