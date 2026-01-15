@@ -2,15 +2,12 @@ from telebot import types
 import telebot
 import asyncio
 import time
-import io
 from datetime import datetime
 from threading import Thread
 from datetime import timedelta
-from promotions import promotions  
 from telebot.types import InputMediaPhoto
 from api_key import API_TOKEN
 import logging
-from PIL import Image, ImageDraw, ImageFont
 from io import BytesIO
 import random
 from messages import *
@@ -123,25 +120,29 @@ def handle_buttons(message):
         bot.register_next_step_handler(message, process_character_name)
     elif text.startswith("создать персонажа"):        
         bot.send_message(user_id, "Выбери пол своего персонажа", reply_markup=create_keyboard_for_choose_gender())        
-    elif text.startswith("навестить персонажа"):
-        bot.send_message(user_id, "Вернулся голубчик")        
+    elif text.startswith("навестить персонажа"):        
         check_character_and_send_status(user_id)
-    elif text.startswith("кормление"):
+
+    elif text.startswith("покормить роллами"):
         ugrade_character_parameter_and_show_new_avatar(user_id, 'hunger', +10)        
-    elif text.startswith("посещение"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'entertainment', +5)                
-    elif text.startswith("шопинг"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'money_needs', +5)
-    elif text.startswith("провести время с друзьями"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'money_needs', +5)    
-    elif text.startswith("угощение"):
+    elif text.startswith("заказать"):
         ugrade_character_parameter_and_show_new_avatar(user_id, 'hunger', +10) 
-    elif text.startswith("перевод денег"):
+
+    elif text.startswith("сводить в SPA"):
+        ugrade_character_parameter_and_show_new_avatar(user_id, 'fatigue', +5)
+    elif text.startswith("положить на диван перед телевизором"):
+        ugrade_character_parameter_and_show_new_avatar(user_id, 'fatigue', +5)
+    
+    elif text.startswith("отпустить с пацанами в баню"):
+        ugrade_character_parameter_and_show_new_avatar(user_id, 'entertainment', +5)
+    elif text.startswith("скинуть денежку на карту"):
+        ugrade_character_parameter_and_show_new_avatar(user_id, 'entertainment', +5)                          
+
+    elif text.startswith("обнять и поцеловать"):
         ugrade_character_parameter_and_show_new_avatar(user_id, 'money_needs', +5)
-    elif text.startswith("встреча с работы"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'fatigue', +5) 
-    elif text.startswith("предоставление возможности"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'entertainment', +5)         
+    elif text.startswith("похвалить и сказать"):
+        ugrade_character_parameter_and_show_new_avatar(user_id, 'money_needs', +5)                
+    
     else:
         pass        
 
@@ -241,38 +242,33 @@ def check_character_and_send_status(user_id):
     
     # Проверяем, есть ли результат вообще
     if not result or len(result) == 0:
-        return bot.send_message(user_id, "Ваш персонаж отсутствует.")
+        return bot.send_message(user_id, "Ваш персонаж отсутствует.", reply_markup=create_keyboard_for_new_user())
     
     character_data = result[0]
     
     char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, _ = character_data
+    buttons = []
     
     # Формирование клавиатуры действий
-    buttons = []
     if gender == 'female':
-        buttons.extend(["Кормление роллами", "Посещение кинотеатра", "Шопинг", "Угощение коктейлем"])
+        buttons.extend([
+        "Покормить роллами 🍣",
+        "Сводить в SPA 🛀",
+        "Скинуть денежки на карту 💳",
+        "Обнять и поцеловать 😘"
+    ])
     else:
-        buttons.extend(["Посещение футбольного матча", "Угощение домашним обедом", "Встреча с работы", "Проведение времени с друзьями"])
-    
+        buttons.extend([
+        "Заказать WOK 🍜",
+        "Положить на диван перед телевизором 📺",
+        "Отпустить с пацанами в баню / на расслабон 🏖️",
+        "Похвалить и сказать «ты лучший» 👌"
+    ])
+   
     keyboard = create_keyboard(buttons, False)
     
     send_character_image(user_id, char_id, name, gender, hunger, fatigue, entertain, money_need, total_state, keyboard)
 
-def generate_avatar(gender):
-    width, height = 200, 200
-    img = Image.new('RGB', (width, height), color=(255, 255, 255))
-    draw = ImageDraw.Draw(img)
-    font = ImageFont.truetype("arial.ttf", size=20)
-    
-    text = f'{gender.capitalize()} Avatar'
-    w, h = font.getbbox(text)[2:]
-    x = (width - w) / 2
-    y = (height - h) / 2
-    draw.text((x, y), text, fill='black', font=font)
-    
-    bio = BytesIO()
-    img.save(bio, format='PNG')
-    return bio.getvalue()
 
 def send_character_image(user_id, char_id, name, gender, hunger, fatigue, entertain, money_need, total_state, keyboard=None):
     conn = sqlite3.connect('users.db')  # Подключение к базе данных
@@ -283,11 +279,12 @@ def send_character_image(user_id, char_id, name, gender, hunger, fatigue, entert
     row = cursor.fetchone()
     
     if row is None:
-        # Если персонажа нет в базе данных, генерируем аватар
-        img_bytes = generate_avatar(gender)
+        # Если персонажа нет в базе данных
+        bot.send_message(user_id, "Персонаж не найден")
+        
     elif row[0] is None:
         # Если изображение отсутствует в базе данных, тоже генерируем аватар
-        img_bytes = generate_avatar(gender)
+        bot.send_message(user_id, "Изображение персонажа не найдено")        
     else:
         img_bytes = row[0]  # Получаем BLOB-данные изображения
     
@@ -296,16 +293,16 @@ def send_character_image(user_id, char_id, name, gender, hunger, fatigue, entert
     
     # Готовим изображение для отправки
     bio = BytesIO(img_bytes)
-    bio.seek(0)
+    bio.seek(0)   
     
     # Формирование подписи к картинке
     caption = (
         f"{name}\n"
         f"Голод: {hunger:.0f}%\n"
         f"Усталость: {fatigue:.0f}%\n"
-        f"Потребность в развлечениях: {entertain:.0f}%\n"
-        f"Необходимость в финансах: {money_need:.0f}%"
-    )
+        f"Потребность развеятся: {entertain:.0f}%\n"        
+        f"Потребность в заботе: {money_need:.0f}%"
+    ) 
     
     # Отправляем изображение
     bot.send_photo(user_id, bio, caption=caption, reply_markup=keyboard)     
@@ -324,19 +321,23 @@ def hourly_update_characters():
         new_total_state = sum([hunger, fatigue, entertain, money_need]) / 4
         logger.info(f"Результат расчета состояния {new_total_state} - {name} - {char_id} - {hunger} - {fatigue} - {entertain} - {money_need}")
         update_character_stats(max(hunger,0), max(fatigue,0), max(entertain,0), max(money_need,0), max(new_total_state,0), char_id)     
-        check_total_state(user_id,char_id,name,max(new_total_state,0))        
+        check_total_state(user_id,char_id,name,gender,max(new_total_state,0))        
         check_character_old(user_id, char_id, created_at)                                          
         
         logger.info(f"Запущена функция обновления статистики персонажа в БД для {char_id} - {new_total_state}")
 
-def check_total_state(user_id, char_id, name, new_total_state):
+def check_total_state(user_id, char_id, name, gender, new_total_state):
     # Проверка уровня здоровья
         if new_total_state <= 20:            
             delete_character_from_db(char_id)
-            bot.send_message(user_id, f"Ваш персонаж {name} покинул Вас :(", reply_markup=create_keyboard_for_new_user(), parse_mode="HTML")
+            fail_text = FAIL_TEXT_MAN if gender == "male" else FAIL_TEXT_WOMEN
+            bot.send_message(user_id, fail_text, parse_mode="HTML")
+            bot.send_message(user_id, f"Ваш персонаж {name} покинул Вас", reply_markup=create_keyboard_for_new_user(), parse_mode="HTML")
         elif new_total_state <= 30:            
             bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось до {new_total_state}, вам лучше проверить его состояние!", reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
-        elif new_total_state <= 50:
+        elif new_total_state <= 50:            
+            bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось до {new_total_state}, вам лучше проверить его состояние!", reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
+        elif new_total_state <= 80:
             bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось до {new_total_state}, вам лучше проверить его состояние!", reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
 
 def check_character_old (user_id, char_id, created_at):
@@ -347,8 +348,8 @@ def check_character_old (user_id, char_id, created_at):
         if created_dt < five_days_ago:
             delete_character_from_db(char_id)
             element=getPromo()
-            bot.send_message(user_id, f"Твой промокод {element}")
-            bot.send_message(user_id, f"Поздравляю! Ваш персонаж достиг 5-дневного рубежа и получил специальный приз!", reply_markup=create_keyboard_for_new_user(), parse_mode="HTML")   
+            сongratulation_text = CONGRATULATION_TEXT.format(element)           
+            bot.send_message(user_id, сongratulation_text, reply_markup=create_keyboard_for_new_user(), parse_mode="HTML")   
             
 
 # Функция для запуска таймера
@@ -360,7 +361,7 @@ def run_timer():
         #   hourly_update_characters()
         hourly_update_characters()
         
-        time.sleep(20)  # Проверяем каждую минуту      
+        time.sleep(40)  # Проверяем каждую минуту      
 
 # Запускаем таймер в отдельном потоке
 timer_thread = Thread(target=run_timer)

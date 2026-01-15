@@ -61,16 +61,26 @@ def add_character_to_database(user_id, name, gender, bio):
 
 def update_character_parameter(user_id, param_name, value_change):
     """
-    Обновляет числовую характеристику персонажа в базе данных.
+    Обновляет числовую характеристику персонажа в базе данных,
+    ограничивая её максимум значением 100.
     
     :param user_id: ID пользователя, чей персонаж обновляется
     :param param_name: Название характеристики (например, голод, усталость и т.п.)
     :param value_change: Значение, на которое изменится характеристика
     """
-    query = f"""
-        UPDATE characters SET {param_name}=({param_name}+?) WHERE user_id=?
-    """
-    execute_query(query, (value_change, user_id)) 
+    # Запрашиваем текущее значение характеристики
+    select_query = f"SELECT {param_name} FROM characters WHERE user_id=?"
+    current_value_result = execute_query(select_query, (user_id,))
+    if not current_value_result:
+        raise ValueError("Характеристика персонажа не найдена для указанного пользователя.")
+    current_value = current_value_result[0][0]
+
+    # Ограничиваем итоговое значение до максимума в 100
+    new_value = min(current_value + value_change, 100)
+
+    # Обновляем базу данных
+    update_query = f"UPDATE characters SET {param_name}=? WHERE user_id=?"
+    execute_query(update_query, (new_value, user_id))
 
 def delete_character_from_db(char_id):
     """
