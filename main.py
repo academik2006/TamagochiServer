@@ -202,28 +202,9 @@ def check_character_and_send_status(user_id):
     if not result or len(result) == 0:
         return bot.send_message(user_id, "Ваш персонаж отсутствует.", reply_markup=create_keyboard_for_new_user())
     
-    character_data = result[0]
-    
-    char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, _ = character_data
-    buttons = []
-    
-    # Формирование клавиатуры действий
-    if gender == 'female':
-        buttons.extend([
-        "Покормить роллами 🍣",
-        "Сводить в SPA 🛀",
-        "Скинуть денежки на карту 💳",
-        "Обнять и поцеловать 😘"
-    ])
-    else:
-        buttons.extend([
-        "Заказать WOK 🍜",
-        "Положить на диван перед телевизором 📺",
-        "Отпустить с пацанами в баню / на расслабон 🏖️",
-        "Похвалить и сказать «ты лучший» 👌"
-    ])
-   
-    keyboard = create_keyboard(buttons, False)
+    character_data = result[0]    
+    char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, _ = character_data      
+    keyboard = create_keyboard_for_chatacter_avatar(gender)
     
     send_character_image(user_id, name, hunger, fatigue, entertain, money_need, keyboard)
 
@@ -267,9 +248,8 @@ def hourly_update_characters():
         logger.info(f"Результат расчета состояния {new_total_state} - {name} - {char_id} - {hunger} - {fatigue} - {entertain} - {money_need}")
         update_character_stats(max(hunger,0), max(fatigue,0), max(entertain,0), max(money_need,0), max(new_total_state,0), char_id)     
         check_total_state(user_id,char_id,name,gender,max(new_total_state,0))        
-        check_character_old(user_id, char_id, created_at)                                          
+        check_character_old(user_id, char_id, created_at)                                                 
         
-        logger.info(f"Запущена функция обновления статистики персонажа в БД для {char_id} - {new_total_state}")
 
 def check_total_state(user_id, char_id, name, gender, new_total_state):
     # Проверка уровня здоровья
