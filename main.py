@@ -86,14 +86,14 @@ def handle_buttons(message):
     elif text.startswith("заказать"):
         ugrade_character_parameter_and_show_new_avatar(user_id, 'hunger', +10) 
 
-    elif text.startswith("сводить в SPA"):
+    elif text.startswith("сводить в"):
         ugrade_character_parameter_and_show_new_avatar(user_id, 'fatigue', +5)
     elif text.startswith("положить на диван перед телевизором"):
         ugrade_character_parameter_and_show_new_avatar(user_id, 'fatigue', +5)
     
     elif text.startswith("отпустить с пацанами в баню"):
         ugrade_character_parameter_and_show_new_avatar(user_id, 'entertainment', +5)
-    elif text.startswith("скинуть денежку на карту"):
+    elif text.startswith("скинуть денежки на карту"):
         ugrade_character_parameter_and_show_new_avatar(user_id, 'entertainment', +5)                          
 
     elif text.startswith("обнять и поцеловать"):
@@ -148,22 +148,21 @@ def process_user_photo(message):
 def handle_select_standard(call):
     chat_id = call.message.chat.id
     gender = user_data[chat_id]['gender']
-    images = []
     buttons = []
-    
+
     # Показ стандартных изображений
     for i in range(3):
         filename = f'men_{i}.png' if gender == 'male' else f'girl_{i}.png'
         with open(filename, 'rb') as f:
             img_data = f.read()
-            
+        
         button_text = str(i+1)
         buttons.append(types.InlineKeyboardButton(button_text, callback_data=f'select:{button_text}'))
-        images.append(img_data)
-    
+        # Отдельно отправляем каждую картинку
+        bot.send_photo(chat_id, img_data)
+
     # Формируем inline-клавиатуру с номерами картинок
     keyboard = types.InlineKeyboardMarkup().add(*buttons)
-    bot.send_media_group(chat_id, [InputMediaPhoto(image) for image in images])
     bot.send_message(chat_id, "Выберите одну из фотографий:", reply_markup=keyboard)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('select:'))
