@@ -13,6 +13,7 @@ import random
 from messages import *
 from db_utils import *
 from file_work_utils import *
+from keyboards import *
 bot = telebot.TeleBot(API_TOKEN)
 bot.delete_webhook()
 
@@ -63,49 +64,6 @@ def add_user_on_start(message):
         logger.info(f"В базу данных добавлен новый пользователь {user_id}")
     else:        
         check_character_and_send_status(user_id)    
-
-
-def create_keyboard_for_choose_avatar_photo ():
-
-    keyboard = types.InlineKeyboardMarkup(row_width=2)
-    load_button = types.InlineKeyboardButton(text="Загрузить своё", callback_data='load_own')
-    select_standard_button = types.InlineKeyboardButton(text="Выбрать стандартное", callback_data='select_standard')
-    keyboard.add(load_button, select_standard_button)
-    
-    return keyboard
-
-def create_keyboard_for_choose_gender ():
-
-    buttons = [
-        'Мужской',
-        'Женский'        
-    ]
-    return create_keyboard (buttons, True)    
-
-def create_keyboard_for_new_user():
-
-    buttons = [
-        'Правила игры',
-        'Условия акции',
-        'Создать персонажа',
-    ]
-    return create_keyboard (buttons, False)
-
-def create_keyboard_for_continue():
-
-    buttons = [
-        'Навестить персонажа'        
-    ]
-    return create_keyboard (buttons, False)
-    
-
-def create_keyboard(buttons, one_time):
-    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2, one_time_keyboard=one_time)    
-    for text in buttons:
-        btn = types.KeyboardButton(text=text)
-        keyboard.add(btn)
-
-    return keyboard  
   
 
 @bot.message_handler(func=lambda m: True)
@@ -267,45 +225,32 @@ def check_character_and_send_status(user_id):
    
     keyboard = create_keyboard(buttons, False)
     
-    send_character_image(user_id, char_id, name, gender, hunger, fatigue, entertain, money_need, total_state, keyboard)
+    send_character_image(user_id, name, hunger, fatigue, entertain, money_need, keyboard)
 
 
-def send_character_image(user_id, char_id, name, gender, hunger, fatigue, entertain, money_need, total_state, keyboard=None):
-    conn = sqlite3.connect('users.db')  # Подключение к базе данных
-    cursor = conn.cursor()
+def send_character_image(user_id, name, hunger, fatigue, entertain, money_need, keyboard=None):
     
-    # Получаем изображение персонажа из базы данных
-    cursor.execute("SELECT photo FROM characters WHERE user_id=?", (user_id,))
-    row = cursor.fetchone()
+    img_bytes = fetch_character_photo(user_id)
     
-    if row is None:
-        # Если персонажа нет в базе данных
-        bot.send_message(user_id, "Персонаж не найден")
-        
-    elif row[0] is None:
-        # Если изображение отсутствует в базе данных, тоже генерируем аватар
-        bot.send_message(user_id, "Изображение персонажа не найдено")        
+    if img_bytes is None:
+        # Если персонажа нет в базе данных или изображение отсутствует
+        bot.send_message(user_id, "Персонаж или изображение не найдены")
     else:
-        img_bytes = row[0]  # Получаем BLOB-данные изображения
-    
-    # Закрываем соединение с базой данных
-    conn.close()
-    
-    # Готовим изображение для отправки
-    bio = BytesIO(img_bytes)
-    bio.seek(0)   
-    
-    # Формирование подписи к картинке
-    caption = (
-        f"{name}\n"
-        f"Голод: {hunger:.0f}%\n"
-        f"Усталость: {fatigue:.0f}%\n"
-        f"Потребность развеятся: {entertain:.0f}%\n"        
-        f"Потребность в заботе: {money_need:.0f}%"
-    ) 
-    
-    # Отправляем изображение
-    bot.send_photo(user_id, bio, caption=caption, reply_markup=keyboard)     
+        # Готовим изображение для отправки
+        bio = BytesIO(img_bytes)
+        bio.seek(0)
+        
+        # Формирование подписи к картинке
+        caption = (
+            f"{name}\n"
+            f"Голод: {hunger:.0f}%\n"
+            f"Усталость: {fatigue:.0f}%\n"
+            f"Потребность развлечься: {entertain:.0f}%\n"
+            f"Потребность в заботе: {money_need:.0f}%"
+        )
+        
+        # Отправляем изображение
+        bot.send_photo(user_id, bio, caption=caption, reply_markup=keyboard)     
 
 def hourly_update_characters():   
         

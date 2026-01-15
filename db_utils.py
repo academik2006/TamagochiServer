@@ -45,6 +45,21 @@ def add_user_to_database(user_id, username):
     # Передаем параметры через tuple
     execute_query(query, (user_id, username))
 
+def fetch_character_photo(user_id):
+    """
+    Возвращает фотографию персонажа из базы данных.
+    
+    :param user_id: ID пользователя
+    :return: bytes объект фотографии или None, если фотография не найдена
+    """
+    query = "SELECT photo FROM characters WHERE user_id=?"
+    result = execute_query(query, (user_id,))
+    
+    if len(result) > 0 and result[0][0]:
+        return result[0][0]
+    else:
+        return None    
+
 def add_character_to_database(user_id, name, gender, bio):
     """
     Добавляет персонаж в таблицу characters.
