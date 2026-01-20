@@ -10,10 +10,11 @@ from api_key import API_TOKEN
 import logging
 from io import BytesIO
 import random
-from messages import *
 from db_utils import *
+from messages import *
 from file_work_utils import *
 from keyboards import *
+
 bot = telebot.TeleBot(API_TOKEN)
 bot.delete_webhook()
 
@@ -22,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 # Словарь для временного хранения данных пользователей
 user_data = {}
-
 
 async def main():    
     logger.info("Бот запущен")
@@ -105,7 +105,12 @@ def handle_buttons(message):
 
 
 def ugrade_character_parameter_and_show_new_avatar (user_id, param_name, value_change):
+    need_send_message, gender = update_character_parameter(user_id, param_name, value_change)
+    # Если нужно отправить сообщение, делаем это отсюда
+    if need_send_message:
+        send_random_message(user_id, param_name, gender)    
     update_character_parameter(user_id, param_name, value_change)
+
     check_character_and_send_status(user_id)
 
 def process_character_name(message):
@@ -176,6 +181,15 @@ def handle_select_standard_photo(call):
     
     bot.answer_callback_query(call.id, show_alert=False, text="Фото выбрано.")
     create_character(chat_id)
+
+def send_random_message(chat_id, param_name, gender):
+    """
+    Отправляет случайное сообщение пользователю в зависимости от типа параметра и пола персонажа.
+    """
+    messages_list = MESSAGES_BY_PARAM_AND_GENDER.get(param_name, {}).get(gender)
+    if messages_list:
+        message = random.choice(messages_list)
+        bot.send_message(chat_id, message)
 
 
 def create_character(user_id):    
@@ -262,12 +276,27 @@ def check_total_state(user_id, char_id, name, gender, new_total_state):
             fail_text = FAIL_TEXT_MAN if gender == "male" else FAIL_TEXT_WOMEN
             bot.send_message(user_id, fail_text, parse_mode="HTML")
             bot.send_message(user_id, f"Ваш персонаж {name} покинул Вас", reply_markup=create_keyboard_for_new_user(), parse_mode="HTML")
-        elif new_total_state <= 30:            
-            bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось до {new_total_state}%, вам лучше проверить его состояние!", reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
-        elif new_total_state <= 50:            
-            bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось до {new_total_state}%, вам лучше проверить его состояние!", reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
+        elif new_total_state <= 30:
+            phrases = [
+            "Последнее предупреждение.Дальше – чемоданы.",
+            "Это уже тревожный звоночек.Очень тревожный!",
+            "Мы почти на грани.Я серьезно."            
+            ]
+            bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")            
+        elif new_total_state <= 50:
+            phrases = [
+            "Я еще держусь, но это уже не мой лучший день.",
+            "Я не паникую.Но повода для радости тоже мало.",
+            "Так… у нас тут уже не идеально.Я начинаю чувствовать себя забытым."
+            ]
+            bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")
         elif new_total_state <= 80:
-            bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось до {new_total_state}%, вам лучше проверить его состояние!", reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
+            phrases = [
+            "Хмм… кажется, у нас тут легкий эмоциональный сквозняк.\nНичего критичного, но лучше заглянуть.",
+            "Алло! Всё ок, но не на 100%.\nПроверь, как я там, пожалуйста.",
+            "Мне вроде нормально. Но с тобой было бы лучше 😢"
+            ]
+            bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")            
 
 def check_character_old (user_id, char_id, created_at):
     # Проверка возраста персонажа

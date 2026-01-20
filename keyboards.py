@@ -30,7 +30,7 @@ def create_keyboard_for_new_user():
 def create_keyboard_for_continue():
 
     buttons = [
-        'Навестить персонажа'        
+        'Проведать любимку ❤️'        
     ]
     return create_keyboard (buttons, False)
 
