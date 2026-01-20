@@ -14,6 +14,8 @@ from db_utils import *
 from messages import *
 from file_work_utils import *
 from keyboards import *
+from PIL import Image, ImageDraw, ImageFont
+import io
 
 bot = telebot.TeleBot(API_TOKEN)
 bot.delete_webhook()
@@ -192,6 +194,75 @@ def send_random_message(chat_id, param_name, gender):
         message = random.choice(messages_list)
         bot.send_message(chat_id, message)
 
+def draw_progress_bars(image, hunger, fatigue, entertain, money_need):
+    """
+    Рисует горизонтальные прогресс-бары поверх изображения.
+    """
+    # Размер шрифта и отступы
+    font_size = 20
+    bar_height = 20
+    padding = 10
+    margin_top = image.height - ((bar_height + padding) * 4)
+    
+    # Загрузка шрифта
+    font = ImageFont.truetype("arial.ttf", size=font_size)
+    
+    # Создание копии изображения для рисования
+    draw = ImageDraw.Draw(image)
+    
+    # Цвета
+    bg_color = "#ffffff"
+    fg_color = "#ff0000"
+    label_color = "#000000"
+    
+    values = [(hunger, "Голод"), (fatigue, "Усталость"), (entertain, "Развлечения"), (money_need, "Забота")]
+    
+    for i, (value, label) in enumerate(values):
+        y_pos = margin_top + (i * (bar_height + padding)) + padding
+        
+        # Рисование фона прогресс-бара
+        draw.rectangle([padding, y_pos, image.width - padding, y_pos + bar_height], fill=bg_color)
+        
+        # Прогресс-бар заполненный цветом
+        progress_width = value / 100 * (image.width - 2*padding)
+        draw.rectangle([padding, y_pos, padding+progress_width, y_pos + bar_height], fill=fg_color)
+        
+        # Подпись над каждой полосой
+        draw.text((padding, y_pos - font_size), label, font=font, fill=label_color)
+    
+    return image
+
+# Пример использования
+def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need):
+    original_img = fetch_character_photo(user_id)
+    img = Image.open(io.BytesIO(original_img))
+    
+    # Применяем функцию рисования шкал
+    final_img = draw_progress_bars(img, hunger, fatigue, entertain, money_need)
+    
+    # Преобразовываем изображение в байтовый объект для отправки
+    output_buffer = io.BytesIO()
+    final_img.save(output_buffer, format='PNG')
+    output_buffer.seek(0)
+    
+    return output_buffer.read()
+
+# Новый метод отправки изображения с графиками
+def send_character_image_with_progress(user_id, name, hunger, fatigue, entertain, money_need, keyboard=None):
+    global last_message_id
+    
+    img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need)
+    
+    if img_bytes is None:
+        bot.send_message(user_id, "Персонаж или изображение не найдены")
+    else:
+        bio = io.BytesIO(img_bytes)
+        bio.seek(0)
+        
+        # Отправляем изображение с шкалами
+        sent_message = bot.send_photo(user_id, bio, reply_markup=keyboard)
+        last_message_id = sent_message.message_id
+
 
 def create_character(user_id):    
     data = user_data.pop(user_id)
@@ -218,7 +289,8 @@ def check_character_and_send_status(user_id):
     character_data = result[0]    
     char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, _ = character_data      
     keyboard = create_keyboard_for_chatacter_avatar(gender)
-    send_character_image(user_id, name, hunger, fatigue, entertain, money_need, keyboard)
+    send_character_image_with_progress(user_id, name, hunger, fatigue, entertain, money_need)
+    #send_character_image(user_id, name, hunger, fatigue, entertain, money_need, keyboard)
     
     
 # Отправка изображения с подписью (аналогично вашему примеру)
