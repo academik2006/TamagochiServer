@@ -257,9 +257,7 @@ def send_character_image_with_progress(user_id, name, hunger, fatigue, entertain
         bot.send_message(user_id, "Персонаж или изображение не найдены")
     else:
         bio = io.BytesIO(img_bytes)
-        bio.seek(0)
-        
-        # Отправляем изображение с шкалами
+        bio.seek(0)       
         sent_message = bot.send_photo(user_id, bio, reply_markup=keyboard)
         last_message_id = sent_message.message_id
 
@@ -280,6 +278,7 @@ def create_character(user_id):
     check_character_and_send_status(user_id)  
 
 def check_character_and_send_status(user_id):
+    global last_message_id
     result = execute_query("SELECT * FROM characters WHERE user_id=?", (user_id,))
     
     # Проверяем, есть ли результат вообще
@@ -289,51 +288,19 @@ def check_character_and_send_status(user_id):
     character_data = result[0]    
     char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, _ = character_data      
     keyboard = create_keyboard_for_chatacter_avatar(gender)
-    send_character_image_with_progress(user_id, name, hunger, fatigue, entertain, money_need)
-    #send_character_image(user_id, name, hunger, fatigue, entertain, money_need, keyboard)
-    
-    
-# Отправка изображения с подписью (аналогично вашему примеру)
-def send_character_image(user_id, name, hunger, fatigue, entertain, money_need, keyboard=None):
-    global last_message_id
-    
-    img_bytes = fetch_character_photo(user_id)
-    
-    if img_bytes is None:
-        bot.send_message(user_id, "Персонаж или изображение не найдены")
+
+    if last_message_id is None:
+        send_character_image_with_progress(user_id, name, hunger, fatigue, entertain, money_need,keyboard)
     else:
-        bio = BytesIO(img_bytes)
+        # Генерация и отправка нового изображения с изменёнными показателями
+        new_img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need)
+        bio = io.BytesIO(new_img_bytes)
         bio.seek(0)
-        
-        # Объединяем изображение и подпись в одном вызове
-        text = "%s \nГолод: %.0f%% \nУсталость: %.0f%% \nПотребность развлечься: %.0f%% \nПотребность в заботе: %.0f%%" % (
-            name, hunger, fatigue, entertain, money_need
-        )
-
-        if last_message_id is None:
-            sent_message = bot.send_photo(user_id, bio, caption=text, reply_markup=keyboard)
-            last_message_id = sent_message.message_id
-        else:
-            update_caption(user_id, name, hunger, fatigue, entertain, money_need)
-       
-
-# Обновление подписи изображения (без перезагрузки самого изображения)
-def update_caption(user_id, name, hunger, fatigue, entertain, money_need):
-    global last_message_id
-    
-    new_text = "%s \nГолод: %.0f%% \nУсталость: %.0f%% \nПотребность развлечься: %.0f%% \nПотребность в заботе: %.0f%%" % (
-        name, hunger, fatigue, entertain, money_need
-    )
-    
-    try:
-        # Используем edit_message_caption для изменения подписи под изображением
-        bot.edit_message_caption(
-            caption=new_text,
-            chat_id=user_id,
-            message_id=last_message_id
-        )
-    except telebot.apihelper.ApiException as e:
-        logging.error(f"Ошибка редактирования: {e}")
+        # Удаляем старое сообщение и отправляем новое
+        bot.delete_message(user_id, last_message_id)
+        sent_message = bot.send_photo(user_id, bio, reply_markup=keyboard)
+        last_message_id = sent_message.message_id      
+     
     
 
 def hourly_update_characters():   
