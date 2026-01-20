@@ -54,13 +54,12 @@ def add_user_on_start(message):
     result = execute_query("SELECT * FROM users WHERE user_id=?", (user_id,))
     if not result:
         username = message.from_user.first_name 
-        image_path = 'event_cal_cat.png'  
+        image_path = 'welcome_pic.jpg'  
         welcome_text = WELCOME_TEXT.format(username=username)
         with open(image_path, 'rb') as photo_file:
-            bot.send_photo(chat_id=message.chat.id, photo=photo_file, caption=welcome_text, parse_mode="HTML")       
+            bot.send_photo(chat_id=message.chat.id, photo=photo_file, caption=welcome_text, parse_mode="HTML", reply_markup=create_keyboard_for_new_user())       
         # Пользователь новый, добавляем в базу        
-        add_user_to_database(user_id, message.from_user.username)              
-        bot.send_message(user_id, "Приветствуем тебя!\n Изучи правила и условия акции и создавай персонажа", reply_markup=create_keyboard_for_new_user())                        
+        add_user_to_database(user_id, message.from_user.username)                      
         logger.info(f"В базу данных добавлен новый пользователь {user_id}")
     else:        
         check_character_and_send_status(user_id)    
@@ -82,24 +81,24 @@ def handle_buttons(message):
         check_character_and_send_status(user_id)
 
     elif text.startswith("покормить роллами"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'hunger', +10)        
+        ugrade_character_parameter_and_show_new_avatar(user_id, 'hunger', +40)        
     elif text.startswith("заказать"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'hunger', +10) 
+        ugrade_character_parameter_and_show_new_avatar(user_id, 'hunger', +40) 
 
     elif text.startswith("сводить в"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'fatigue', +5)
+        ugrade_character_parameter_and_show_new_avatar(user_id, 'fatigue', +20)
     elif text.startswith("положить на диван перед телевизором"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'fatigue', +5)
+        ugrade_character_parameter_and_show_new_avatar(user_id, 'fatigue', +20)
     
     elif text.startswith("отпустить с пацанами в баню"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'entertainment', +5)
+        ugrade_character_parameter_and_show_new_avatar(user_id, 'entertainment', +20)
     elif text.startswith("скинуть денежки на карту"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'entertainment', +5)                          
+        ugrade_character_parameter_and_show_new_avatar(user_id, 'entertainment', +20)                          
 
     elif text.startswith("обнять и поцеловать"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'money_needs', +5)
+        ugrade_character_parameter_and_show_new_avatar(user_id, 'money_needs', +20)
     elif text.startswith("похвалить и сказать"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'money_needs', +5)                
+        ugrade_character_parameter_and_show_new_avatar(user_id, 'money_needs', +20)                
     
     else:
         pass        
@@ -246,23 +245,29 @@ def hourly_update_characters():
         new_total_state = sum([hunger, fatigue, entertain, money_need]) / 4
         logger.info(f"Результат расчета состояния {new_total_state} - {name} - {char_id} - {hunger} - {fatigue} - {entertain} - {money_need}")
         update_character_stats(max(hunger,0), max(fatigue,0), max(entertain,0), max(money_need,0), max(new_total_state,0), char_id)     
+
+        check_hunger(user_id,gender,hunger)
+        check_entertain(user_id,gender,hunger)
+        check_fatigue(user_id,gender,hunger)
+        check_money_need(user_id,gender,hunger)
+
         check_total_state(user_id,char_id,name,gender,max(new_total_state,0))        
         check_character_old(user_id, char_id, created_at)                                                 
         
 
 def check_total_state(user_id, char_id, name, gender, new_total_state):
-    # Проверка уровня здоровья
+    # Проверка общего уровня здоровья
         if new_total_state <= 20:            
             delete_character_from_db(char_id)
             fail_text = FAIL_TEXT_MAN if gender == "male" else FAIL_TEXT_WOMEN
             bot.send_message(user_id, fail_text, parse_mode="HTML")
             bot.send_message(user_id, f"Ваш персонаж {name} покинул Вас", reply_markup=create_keyboard_for_new_user(), parse_mode="HTML")
         elif new_total_state <= 30:            
-            bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось до {new_total_state}, вам лучше проверить его состояние!", reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
+            bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось до {new_total_state}%, вам лучше проверить его состояние!", reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
         elif new_total_state <= 50:            
-            bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось до {new_total_state}, вам лучше проверить его состояние!", reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
+            bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось до {new_total_state}%, вам лучше проверить его состояние!", reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
         elif new_total_state <= 80:
-            bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось до {new_total_state}, вам лучше проверить его состояние!", reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
+            bot.send_message(user_id, f"Состояние Вашего персонажа ухудшилось до {new_total_state}%, вам лучше проверить его состояние!", reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
 
 def check_character_old (user_id, char_id, created_at):
     # Проверка возраста персонажа
@@ -274,6 +279,43 @@ def check_character_old (user_id, char_id, created_at):
             element=getPromo()
             сongratulation_text = CONGRATULATION_TEXT.format(element)           
             bot.send_message(user_id, сongratulation_text, reply_markup=create_keyboard_for_new_user(), parse_mode="HTML")   
+
+def check_hunger(user_id, gender, hunger):
+    # Проверка уровня голода
+    if hunger < 50:
+        message = ""
+        if gender == 'female':
+            message = "🍣 Я не ела уже целую вечность!\nРоллы бы сейчас спасли эту историю любви."
+        elif gender == 'male':
+            message = "🍜 Я думаю о еде больше, чем о смысле жизни.\nНам срочно нужен вок."
+        bot.send_message(user_id, message, parse_mode="HTML")
+
+def check_fatigue(user_id, gender, fatigue):
+    if fatigue < 60:
+        message = ""
+        if gender == 'female':
+            message = "🛀 Я устала.\nОчень.\nСПА. СРОЧНО."
+        elif gender == 'male':
+            message = "📺 Я морально на диване...\nА физически – еще нет."
+        bot.send_message(user_id, message, parse_mode="HTML")
+
+def check_entertain(user_id, gender, entertain):
+    if entertain <= 40:
+        message = ""
+        if gender == 'female':
+            message = "💸 Мне срочно нужно немного денег на развлечения…\nЯ держусь, но карта – нет."
+        elif gender == 'male':
+            message = "🏖️ Мне нужно к пацанам в баню.\nЭто не побег, это… профилактика усталости."
+        bot.send_message(user_id, message, parse_mode="HTML")
+
+def check_money_need(user_id, gender, money_need):
+    if money_need < 55:
+        message = ""
+        if gender == 'female':
+            message = "😘 Алло, а где мои обнимашки?\nИсправь."
+        elif gender == 'male':
+            message = "🙃 Алло, а где мои обнимашки?\nИсправь."
+        bot.send_message(user_id, message, parse_mode="HTML")
             
 
 # Функция для запуска таймера
@@ -282,10 +324,9 @@ def run_timer():
         current_time = datetime.now()       
         # Выбираем диапазон часов, в течение которого будем обновлять персонажей
         #if 9 <= current_time.hour <= 16 and current_time.minute == 0:
-        #   hourly_update_characters()
         hourly_update_characters()
-        
-        time.sleep(40)  # Проверяем каждую минуту      
+        time.sleep(60)  # Проверяем каждую минуту      
+        #time.sleep(7200)  # Проверяем каждые два часа
 
 # Запускаем таймер в отдельном потоке
 timer_thread = Thread(target=run_timer)
