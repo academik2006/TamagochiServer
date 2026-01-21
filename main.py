@@ -1,3 +1,4 @@
+import os
 from telebot import types
 import telebot
 import asyncio
@@ -113,6 +114,7 @@ def ugrade_character_parameter_and_show_new_avatar (user_id, param_name, value_c
     # Если нужно отправить сообщение, делаем это отсюда
     if need_send_message:
         send_random_message(user_id, param_name, gender)    
+        return
     
     check_character_and_send_status(user_id)
 
@@ -139,28 +141,25 @@ def handle_load_own(call):
 def process_user_photo(message):
     if message.content_type != 'photo':
         bot.reply_to(message, "Это не фотография. Пожалуйста, отправьте фото.")
-        return
-
-    # Берём самую большую версию фотографии
+        return    
     file_info = bot.get_file(message.photo[-1].file_id)
     downloaded_file = bot.download_file(file_info.file_path)
-
-    # Сохраняем оригинальное изображение в словаре user_data
+    
     user_data[message.chat.id]['photo'] = downloaded_file
-    bot.send_message(message.chat.id, "Фотография принята.", reply_markup=types.ReplyKeyboardRemove())
-    # Переходим к созданию персонажа
+    bot.send_message(message.chat.id, "Фотография принята.", reply_markup=types.ReplyKeyboardRemove())    
     create_character(message.chat.id)
 
 @bot.callback_query_handler(func=lambda call: call.data == 'select_standard')
 def handle_select_standard(call):
     chat_id = call.message.chat.id
     gender = user_data[chat_id]['gender']
-    buttons = []
+    buttons = []           
 
     # Показ стандартных изображений
-    for i in range(3):
+    for i in range(4):
         filename = f'men_{i}.png' if gender == 'male' else f'girl_{i}.png'
-        with open(filename, 'rb') as f:
+        full_path = os.path.join('pic', filename)
+        with open(full_path, 'rb') as f:
             img_data = f.read()
         
         button_text = str(i+1)
@@ -178,9 +177,9 @@ def handle_select_standard_photo(call):
     chat_id = call.message.chat.id
     gender = user_data[chat_id]['gender']
     filename = f'men_{selected_number}.png' if gender == 'male' else f'girl_{selected_number}.png'
-    
-    with open(filename, 'rb') as f:
-        user_data[chat_id]['photo'] = f.read()
+    full_path = os.path.join('pic', filename)
+    with open(full_path, 'rb') as f:
+        user_data[chat_id]['photo'] = f.read()           
     
     bot.answer_callback_query(call.id, show_alert=False, text="Фото выбрано.")
     create_character(chat_id)
@@ -200,9 +199,9 @@ def draw_progress_bars(image, hunger, fatigue, entertain, money_need):
     """
     # Размер шрифта и отступы
     font_size = 20
-    bar_height = 20
+    bar_height = 10
     padding = 10
-    margin_top = image.height - ((bar_height + padding) * 4)
+    margin_top = image.height - ((bar_height + padding) * 4) - 40  # Отступ 40 px
     
     # Загрузка шрифта
     font = ImageFont.truetype("arial.ttf", size=font_size)
@@ -232,34 +231,13 @@ def draw_progress_bars(image, hunger, fatigue, entertain, money_need):
     
     return image
 
-# Пример использования
-def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need):
-    original_img = fetch_character_photo(user_id)
-    img = Image.open(io.BytesIO(original_img))
-    
-    # Применяем функцию рисования шкал
-    final_img = draw_progress_bars(img, hunger, fatigue, entertain, money_need)
-    
-    # Преобразовываем изображение в байтовый объект для отправки
-    output_buffer = io.BytesIO()
-    final_img.save(output_buffer, format='PNG')
-    output_buffer.seek(0)
-    
-    return output_buffer.read()
 
 # Новый метод отправки изображения с графиками
-def send_character_image_with_progress(user_id, name, hunger, fatigue, entertain, money_need, keyboard=None):
-    global last_message_id
-    
-    img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need)
-    
-    if img_bytes is None:
-        bot.send_message(user_id, "Персонаж или изображение не найдены")
-    else:
-        bio = io.BytesIO(img_bytes)
-        bio.seek(0)       
-        sent_message = bot.send_photo(user_id, bio, reply_markup=keyboard)
-        last_message_id = sent_message.message_id
+def send_character_image_with_progress(user_id, img_bytes, keyboard=None):        
+    bio = io.BytesIO(img_bytes)
+    bio.seek(0)       
+    sent_message = bot.send_photo(user_id, bio, reply_markup=keyboard)    
+    return sent_message.message_id               
 
 
 def create_character(user_id):    
@@ -277,6 +255,31 @@ def create_character(user_id):
     bot.send_message(user_id, f"Персонаж успешно создан!")
     check_character_and_send_status(user_id)  
 
+
+def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need):
+    
+    original_img = fetch_character_photo(user_id)
+    img = Image.open(io.BytesIO(original_img))           
+    
+    # Загружаем фоновый файл
+    background_path = os.path.join('pic', 'back_avatar.png')
+    img = img.resize((img.width // 4, img.height // 4))
+    background = Image.open(background_path)
+    
+    # Размещаем уменьшенное изображение на фоне
+    background.paste(img, (40, 40))
+    
+    # Применяем функцию рисования шкал
+    final_img = draw_progress_bars(background, hunger, fatigue, entertain, money_need)
+    
+    # Преобразовываем изображение в байтовый объект для отправки
+    output_buffer = io.BytesIO()
+    final_img.save(output_buffer, format='PNG')
+    output_buffer.seek(0)
+    
+    return output_buffer.read()
+   
+
 def check_character_and_send_status(user_id):
     global last_message_id
     result = execute_query("SELECT * FROM characters WHERE user_id=?", (user_id,))
@@ -290,18 +293,13 @@ def check_character_and_send_status(user_id):
     keyboard = create_keyboard_for_chatacter_avatar(gender)
 
     if last_message_id is None:
-        send_character_image_with_progress(user_id, name, hunger, fatigue, entertain, money_need,keyboard)
+        img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need)
+        last_message_id = send_character_image_with_progress(user_id, img_bytes,keyboard)
     else:
-        # Генерация и отправка нового изображения с изменёнными показателями
         new_img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need)
-        bio = io.BytesIO(new_img_bytes)
-        bio.seek(0)
-        # Удаляем старое сообщение и отправляем новое
         bot.delete_message(user_id, last_message_id)
-        sent_message = bot.send_photo(user_id, bio, reply_markup=keyboard)
-        last_message_id = sent_message.message_id      
-     
-    
+        last_message_id = send_character_image_with_progress(user_id, new_img_bytes,keyboard)
+  
 
 def hourly_update_characters():   
         
@@ -314,8 +312,7 @@ def hourly_update_characters():
         entertain -= 5
         money_need -= 5
         
-        new_total_state = sum([hunger, fatigue, entertain, money_need]) / 4
-        logger.info(f"Результат расчета состояния {new_total_state} - {name} - {char_id} - {hunger} - {fatigue} - {entertain} - {money_need}")
+        new_total_state = sum([hunger, fatigue, entertain, money_need]) / 4        
         update_character_stats(max(hunger,0), max(fatigue,0), max(entertain,0), max(money_need,0), max(new_total_state,0), char_id)     
 
         check_hunger(user_id,gender,hunger)
