@@ -143,9 +143,21 @@ def process_user_photo(message):
         bot.reply_to(message, "Это не фотография. Пожалуйста, отправьте фото.")
         return    
     file_info = bot.get_file(message.photo[-1].file_id)
+    # Скачиваем файл
     downloaded_file = bot.download_file(file_info.file_path)
+
+    # Преобразование байтов файла в объект изображения
+    img = Image.open(io.BytesIO(downloaded_file))
+
+    # Изменение размера изображения
+    resized_img = img.resize((95, 109), Image.LANCZOS)
+
+    # Конвертируем обратно в bytes
+    buffered = io.BytesIO()
+    resized_img.save(buffered, format="PNG")  # Можно выбрать другой формат, если нужен PNG или другое
+    resized_image_bytes = buffered.getvalue()
     
-    user_data[message.chat.id]['photo'] = downloaded_file
+    user_data[message.chat.id]['photo'] = resized_image_bytes
     bot.send_message(message.chat.id, "Фотография принята.", reply_markup=types.ReplyKeyboardRemove())    
     create_character(message.chat.id)
 
@@ -247,13 +259,8 @@ def create_character(user_id):
     data = user_data.pop(user_id)
     gender = data['gender']
     name = data.get('name', None)  # Если имя ещё не задано, оставляем None
-    photo_blob = data.get('photo', None)
-    
-    # Генерация стандартного имени, если имя не было предварительно определено
-    if not name:
-        name = f"{gender.capitalize()} #{random.randint(1000, 9999)}"
-    
-    # Добавление персонажа в базу данных
+    photo_blob = data.get('photo', None)           
+  
     add_character_to_database(user_id, name, gender, photo_blob)            
     bot.send_message(user_id, f"Персонаж успешно создан!")
     check_character_and_send_status(user_id)  
