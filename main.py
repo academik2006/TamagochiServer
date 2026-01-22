@@ -6,10 +6,8 @@ import time
 from datetime import datetime
 from threading import Thread
 from datetime import timedelta
-from telebot.types import InputMediaPhoto
 from api_key import API_TOKEN
 import logging
-from io import BytesIO
 import random
 from db_utils import *
 from messages import *
@@ -169,8 +167,8 @@ def handle_select_standard(call):
 
     # Показ стандартных изображений
     for i in range(4):
-        filename = f'men_{i}.png' if gender == 'male' else f'women_{i}.png'
-        full_path = os.path.join('pic', filename)
+        filename = f'man_{i}_0.png' if gender == 'male' else f'women_{i}_0.png'
+        full_path = os.path.join('pic\pic_avatar', filename)
         with open(full_path, 'rb') as f:
             img_data = f.read()
         
@@ -188,8 +186,9 @@ def handle_select_standard_photo(call):
     selected_number = int(call.data.split(':')[1]) - 1  # Преобразование номера в индекс массива
     chat_id = call.message.chat.id
     gender = user_data[chat_id]['gender']
-    filename = f'men_{selected_number}.png' if gender == 'male' else f'women_{selected_number}.png'
-    full_path = os.path.join('pic', filename)
+    filename = f'man_{selected_number}_0.png' if gender == 'male' else f'women_{selected_number}_0.png'
+    full_path = os.path.join('pic\pic_avatar', filename)   
+
     with open(full_path, 'rb') as f:
         user_data[chat_id]['photo'] = f.read()           
     
@@ -266,23 +265,28 @@ def create_character(user_id):
     check_character_and_send_status(user_id)  
 
 
-def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need):
+def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state):
     
     original_img = fetch_character_photo(user_id)
-    img_avatar = Image.open(io.BytesIO(original_img))     
+    img_avatar = Image.open(io.BytesIO(original_img))
+    
+    # Изменение размера изображения
+    img_avatar_resized = img_avatar.resize((95, 109), Image.LANCZOS)
+    buffered = io.BytesIO()
+    img_avatar_resized.save(buffered, format="PNG")  # Можно выбрать другой формат, если нужен PNG или другое
+        
     font_size = 14
 
     font = ImageFont.truetype("arial_bold.ttf", size=font_size)      
     
     # Загружаем фоновый файл
-    background_path = os.path.join('pic', 'back_avatar.png')
-    img_avatar = img_avatar.resize((img_avatar.width, img_avatar.height))
+    background_path = os.path.join('pic', 'back_avatar.png')    
     background = Image.open(background_path)
     x_avatar = 40
     y_avatar = 40
     
     # Размещаем уменьшенное изображение на фоне
-    background.paste(img_avatar, (x_avatar, y_avatar))
+    background.paste(img_avatar_resized, (x_avatar, y_avatar))
 
     # Рисуем имя персонажа над аватаром
     draw = ImageDraw.Draw(background)
@@ -313,10 +317,10 @@ def check_character_and_send_status(user_id):
     keyboard = create_keyboard_for_chatacter_avatar(gender)
 
     if last_message_id is None:
-        img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need)
+        img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state)
         last_message_id = send_character_image_with_progress(user_id, img_bytes,keyboard)
     else:
-        new_img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need)
+        new_img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state)
         bot.delete_message(user_id, last_message_id)
         last_message_id = send_character_image_with_progress(user_id, new_img_bytes,keyboard)
   
@@ -332,7 +336,7 @@ def hourly_update_characters():
         entertain -= 5
         money_need -= 5
         
-        new_total_state = sum([hunger, fatigue, entertain, money_need]) / 4        
+        new_total_state = calculate_total_state(hunger, fatigue, entertain, money_need)        
         update_character_stats(max(hunger,0), max(fatigue,0), max(entertain,0), max(money_need,0), max(new_total_state,0), char_id)     
 
         check_hunger(user_id,gender,hunger)
@@ -341,16 +345,16 @@ def hourly_update_characters():
         check_money_need(user_id,gender,hunger)
 
         check_total_state(user_id,char_id,name,gender,max(new_total_state,0))        
-        check_character_old(user_id, char_id, created_at)                                                 
+        check_character_old(user_id, char_id, created_at,gender) 
+
+def calculate_total_state(hunger, fatigue, entertain, money_need):
+    return sum([hunger, fatigue, entertain, money_need]) / 4                                                
         
 
 def check_total_state(user_id, char_id, name, gender, new_total_state):
     # Проверка общего уровня здоровья
-        if new_total_state <= 20:            
-            delete_character_from_db(char_id)
-            fail_text = FAIL_TEXT_MAN if gender == "male" else FAIL_TEXT_WOMEN
-            bot.send_message(user_id, fail_text, parse_mode="HTML")
-            bot.send_message(user_id, f"Ваш персонаж {name} покинул Вас", reply_markup=create_keyboard_for_new_user(), parse_mode="HTML")
+        if new_total_state <= 20:
+            lose(user_id, char_id, gender)    
         elif new_total_state <= 30:
             phrases = [
             "Последнее предупреждение.Дальше – чемоданы.",
@@ -371,18 +375,34 @@ def check_total_state(user_id, char_id, name, gender, new_total_state):
             "Алло! Всё ок, но не на 100%.\nПроверь, как я там, пожалуйста.",
             "Мне вроде нормально. Но с тобой было бы лучше 😢"
             ]
-            bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")            
+            bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
 
-def check_character_old (user_id, char_id, created_at):
+def check_character_old (user_id, char_id, created_at, gender):
     # Проверка возраста персонажа
         now = datetime.now()
         five_days_ago = now - timedelta(days=5)
         created_dt = datetime.strptime(created_at.split('.')[0], "%Y-%m-%d %H:%M:%S")
         if created_dt < five_days_ago:
-            delete_character_from_db(char_id)
-            element=getPromo()
-            сongratulation_text = CONGRATULATION_TEXT.format(element)           
-            bot.send_message(user_id, сongratulation_text, reply_markup=create_keyboard_for_new_user(), parse_mode="HTML")   
+            win(user_id, char_id,gender) 
+
+def win(user_id, char_id, gender):
+    delete_character_from_db(char_id)
+    element=getPromo()
+    сongratulation_text = CONGRATULATION_TEXT.format(element)           
+
+    picture_path = "pic/women_win.jpg" if gender == "male" else "pic/man_win.jpg"
+    with open(picture_path, 'rb') as photo:
+        bot.send_photo(user_id, photo, caption=сongratulation_text, reply_markup=create_keyboard_for_new_user(),parse_mode="HTML")           
+    
+
+def lose(user_id, char_id, gender):
+    delete_character_from_db(char_id)
+    fail_text = FAIL_TEXT_MAN if gender == "male" else FAIL_TEXT_WOMEN            
+    picture_path = "pic/women_lose.jpg" if gender == "male" else "pic/man_lose.jpg"
+                # Отправляем картинку пользователю
+    with open(picture_path, 'rb') as photo:
+        bot.send_photo(user_id, photo, caption=fail_text, reply_markup=create_keyboard_for_new_user(),parse_mode="HTML")           
+
 
 def check_hunger(user_id, gender, hunger):
     # Проверка уровня голода
