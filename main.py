@@ -210,7 +210,7 @@ def draw_progress_bars(image, hunger, fatigue, entertain, money_need):
     """        
     bar_height = 10
     padding = 20
-    margin_top = image.height - ((bar_height + padding) * 4) - 50  # Отступ 50 px
+    margin_top = image.height - ((bar_height + padding) * 4) - 20  # Отступ 50 px
             
     # Создание копии изображения для рисования
     draw = ImageDraw.Draw(image)
@@ -221,10 +221,10 @@ def draw_progress_bars(image, hunger, fatigue, entertain, money_need):
     values = [(hunger, "#ff0000"), (fatigue, "#e75c0c"), (entertain, "#e6d708"), (money_need, "#0ceb2a")]
     # Иконки
     icons = ['pic/icon_hunger.png', 'pic/icon_fatigue.png', 'pic/icon_entertain.png', 'pic/icon_money.png']
-    
-    
+    padding_progress_bar = 30
+        
     for i, (value, color) in enumerate(values):
-        y_pos = margin_top + (i * (bar_height + padding)) + padding
+        y_pos = margin_top + (i * (bar_height + padding)) + 10
 
         #Загрузка иконки
         icon_path = icons[i]
@@ -232,9 +232,9 @@ def draw_progress_bars(image, hunger, fatigue, entertain, money_need):
         icon = icon.resize((20, 20))  # Уменьшаем иконку до нужного размера
         
         # Размещаем иконку перед прогресс-баром
-        image.paste(icon, (15, y_pos-5), icon)
+        image.paste(icon, (padding_progress_bar - 20, y_pos-5), icon)
 
-        padding_progress_bar = 40
+        
         
         # Рисование фона прогресс-бара
         draw.rectangle([padding_progress_bar, y_pos, image.width - padding_progress_bar, y_pos + bar_height], fill=bg_color)
@@ -267,13 +267,7 @@ def create_character(user_id):
 
 def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state):
     
-    original_img = fetch_character_photo(user_id)
-    img_avatar = Image.open(io.BytesIO(original_img))
-    
-    # Изменение размера изображения
-    img_avatar_resized = img_avatar.resize((95, 109), Image.LANCZOS)
-    buffered = io.BytesIO()
-    img_avatar_resized.save(buffered, format="PNG")  # Можно выбрать другой формат, если нужен PNG или другое
+    img_avatar_resized = get_avatar_image(user_id,total_state)
         
     font_size = 14
 
@@ -281,27 +275,60 @@ def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain,
     
     # Загружаем фоновый файл
     background_path = os.path.join('pic', 'back_avatar.png')    
-    background = Image.open(background_path)
-    x_avatar = 40
+    background_img = Image.open(background_path)
+    x_avatar = background_img.width // 2 - img_avatar_resized.width // 2 
     y_avatar = 40
     
     # Размещаем уменьшенное изображение на фоне
-    background.paste(img_avatar_resized, (x_avatar, y_avatar))
+    background_img.paste(img_avatar_resized, (x_avatar, y_avatar))
 
     # Рисуем имя персонажа над аватаром
-    draw = ImageDraw.Draw(background)
+    draw = ImageDraw.Draw(background_img)
     text_position = (x_avatar + 35, y_avatar - 25)  # Позиция текста (x, y)
     draw.text(text_position, name, font=font, fill="#000000")
     
     # Применяем функцию рисования шкал
-    final_img = draw_progress_bars(background, hunger, fatigue, entertain, money_need)
+    final_img_with_progress_bars = draw_progress_bars(background_img, hunger, fatigue, entertain, money_need)
     
     # Преобразовываем изображение в байтовый объект для отправки
     output_buffer = io.BytesIO()
-    final_img.save(output_buffer, format='PNG')
+    final_img_with_progress_bars.save(output_buffer, format='PNG')
     output_buffer.seek(0)
     
     return output_buffer.read()
+
+def add_frame_to_image(img_avatar, color):
+    draw = ImageDraw.Draw(img_avatar)
+    width = 2  # Ширина рамки в пикселях
+    size = img_avatar.size  # Размер изображения
+    
+    # Рисование рамки по краям изображения
+    draw.rectangle([(0, 0), (size[0], width)], fill=color)          # Верхняя граница
+    draw.rectangle([(0, size[1]-width), (size[0], size[1])], fill=color)  # Нижняя граница
+    draw.rectangle([(0, 0), (width, size[1])], fill=color)           # Левая граница
+    draw.rectangle([(size[0]-width, 0), (size[0], size[1])], fill=color)  # Правая граница
+    
+    return img_avatar
+
+def get_avatar_image(user_id, total_state):
+    logger.info(f"Значение total_state = {total_state}")
+    original_img = fetch_character_photo(user_id)
+    img_avatar = Image.open(io.BytesIO(original_img))
+    img_avatar_resized = img_avatar.resize((95, 109), Image.LANCZOS)
+    
+    if total_state >= 30 and total_state <= 50:
+        frame_color = "#FF0000"  # Красный
+    elif total_state > 50 and total_state <= 80:
+        frame_color = "#FFFF00"  # Жёлтый
+    else:
+        frame_color = "#00FF00"  # Зелёный
+        
+    framed_avatar = add_frame_to_image(img_avatar_resized.copy(), frame_color)
+    
+    # Сохраняем обработанное изображение
+    buffered = io.BytesIO()
+    framed_avatar.save(buffered, format="PNG")
+    return framed_avatar
    
 
 def check_character_and_send_status(user_id):
