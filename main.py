@@ -16,6 +16,11 @@ from keyboards import *
 from PIL import Image, ImageDraw, ImageFont
 import io
 
+STATE_LOSE_LOWER_BOUND = 20
+STATE_RED_LOWER_BOUND = 30
+STATE_YELLOW_UPPER_BOUND = 50
+STATE_GREEN_LOWER_BOUND = 80
+
 bot = telebot.TeleBot(API_TOKEN)
 bot.delete_webhook()
 
@@ -167,7 +172,7 @@ def handle_select_standard(call):
 
     # Показ стандартных изображений
     for i in range(4):
-        filename = f'man_{i}_0.png' if gender == 'male' else f'women_{i}_0.png'
+        filename = f'men_{i}_0.png' if gender == 'male' else f'women_{i}_0.png'
         full_path = os.path.join('pic\pic_avatar', filename)
         with open(full_path, 'rb') as f:
             img_data = f.read()
@@ -186,7 +191,7 @@ def handle_select_standard_photo(call):
     selected_number = int(call.data.split(':')[1]) - 1  # Преобразование номера в индекс массива
     chat_id = call.message.chat.id
     gender = user_data[chat_id]['gender']
-    filename = f'man_{selected_number}_0.png' if gender == 'male' else f'women_{selected_number}_0.png'
+    filename = f'men_{selected_number}_0.png' if gender == 'male' else f'women_{selected_number}_0.png'
     full_path = os.path.join('pic\pic_avatar', filename)   
 
     with open(full_path, 'rb') as f:
@@ -208,9 +213,9 @@ def draw_progress_bars(image, hunger, fatigue, entertain, money_need):
     """
     Рисует горизонтальные прогресс-бары поверх изображения.
     """        
-    bar_height = 10
-    padding = 20
-    margin_top = image.height - ((bar_height + padding) * 4) - 20  # Отступ 50 px
+    bar_height = 50
+    padding = 70
+    margin_top = image.height - ((bar_height + padding) * 4) - 300  # Отступ 50 px
             
     # Создание копии изображения для рисования
     draw = ImageDraw.Draw(image)
@@ -221,21 +226,17 @@ def draw_progress_bars(image, hunger, fatigue, entertain, money_need):
     values = [(hunger, "#ff0000"), (fatigue, "#e75c0c"), (entertain, "#e6d708"), (money_need, "#0ceb2a")]
     # Иконки
     icons = ['pic/icon_hunger.png', 'pic/icon_fatigue.png', 'pic/icon_entertain.png', 'pic/icon_money.png']
-    padding_progress_bar = 30
+    padding_progress_bar = 140
         
     for i, (value, color) in enumerate(values):
-        y_pos = margin_top + (i * (bar_height + padding)) + 10
+        y_pos = margin_top + (i * (bar_height + padding)) + 140
 
         #Загрузка иконки
         icon_path = icons[i]
-        icon = Image.open(icon_path)
-        icon = icon.resize((20, 20))  # Уменьшаем иконку до нужного размера
-        
+        icon = Image.open(icon_path)        
         # Размещаем иконку перед прогресс-баром
-        image.paste(icon, (padding_progress_bar - 20, y_pos-5), icon)
-
-        
-        
+        image.paste(icon, (padding_progress_bar - 100, y_pos - 25), icon)
+               
         # Рисование фона прогресс-бара
         draw.rectangle([padding_progress_bar, y_pos, image.width - padding_progress_bar, y_pos + bar_height], fill=bg_color)
                         
@@ -267,24 +268,23 @@ def create_character(user_id):
 
 def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state):
     
-    img_avatar_resized = get_avatar_image(user_id,total_state)
-        
-    font_size = 14
-
-    font = ImageFont.truetype("arial_bold.ttf", size=font_size)      
+    img_avatar = get_avatar_image(user_id,total_state)            
     
     # Загружаем фоновый файл
-    background_path = os.path.join('pic', 'back_avatar.png')    
+    #background_path = os.path.join('pic', 'back_avatar.png')    
+    background_path = os.path.join('pic', 'back_big.png')    
     background_img = Image.open(background_path)
-    x_avatar = background_img.width // 2 - img_avatar_resized.width // 2 
-    y_avatar = 40
+    x_avatar = background_img.width // 2 - img_avatar.width // 2 
+    y_avatar = 80
     
     # Размещаем уменьшенное изображение на фоне
-    background_img.paste(img_avatar_resized, (x_avatar, y_avatar))
+    background_img.paste(img_avatar, (x_avatar, y_avatar))
 
     # Рисуем имя персонажа над аватаром
+    font_size = 44
+    font = ImageFont.truetype("arial_bold.ttf", size=font_size)      
     draw = ImageDraw.Draw(background_img)
-    text_position = (x_avatar + 35, y_avatar - 25)  # Позиция текста (x, y)
+    text_position = (x_avatar+100, y_avatar - 50)  # Позиция текста (x, y)
     draw.text(text_position, name, font=font, fill="#000000")
     
     # Применяем функцию рисования шкал
@@ -297,6 +297,26 @@ def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain,
     
     return output_buffer.read()
 
+def get_avatar_image(user_id, total_state):    
+    original_img = get_character_photo_from_db(user_id)
+    img_avatar = Image.open(io.BytesIO(original_img))    
+
+    if total_state <= STATE_RED_LOWER_BOUND:
+        frame_color = "#FF0000"  # Красный
+    elif total_state <= STATE_YELLOW_UPPER_BOUND:
+        frame_color = "#FFFF00"  # Жёлтый
+    elif total_state <= STATE_GREEN_LOWER_BOUND:
+        frame_color = "#FFFF00"  # Жёлтый
+    else:
+        frame_color = "#00FF00"  # Зелёный        
+        
+    framed_avatar = add_frame_to_image(img_avatar.copy(), frame_color)
+    
+    # Сохраняем обработанное изображение
+    buffered = io.BytesIO()
+    framed_avatar.save(buffered, format="PNG")
+    return framed_avatar
+
 def add_frame_to_image(img_avatar, color):
     draw = ImageDraw.Draw(img_avatar)
     width = 2  # Ширина рамки в пикселях
@@ -306,29 +326,8 @@ def add_frame_to_image(img_avatar, color):
     draw.rectangle([(0, 0), (size[0], width)], fill=color)          # Верхняя граница
     draw.rectangle([(0, size[1]-width), (size[0], size[1])], fill=color)  # Нижняя граница
     draw.rectangle([(0, 0), (width, size[1])], fill=color)           # Левая граница
-    draw.rectangle([(size[0]-width, 0), (size[0], size[1])], fill=color)  # Правая граница
-    
+    draw.rectangle([(size[0]-width, 0), (size[0], size[1])], fill=color)  # Правая граница    
     return img_avatar
-
-def get_avatar_image(user_id, total_state):
-    logger.info(f"Значение total_state = {total_state}")
-    original_img = fetch_character_photo(user_id)
-    img_avatar = Image.open(io.BytesIO(original_img))
-    img_avatar_resized = img_avatar.resize((95, 109), Image.LANCZOS)
-    
-    if total_state >= 30 and total_state <= 50:
-        frame_color = "#FF0000"  # Красный
-    elif total_state > 50 and total_state <= 80:
-        frame_color = "#FFFF00"  # Жёлтый
-    else:
-        frame_color = "#00FF00"  # Зелёный
-        
-    framed_avatar = add_frame_to_image(img_avatar_resized.copy(), frame_color)
-    
-    # Сохраняем обработанное изображение
-    buffered = io.BytesIO()
-    framed_avatar.save(buffered, format="PNG")
-    return framed_avatar
    
 
 def check_character_and_send_status(user_id):
@@ -379,30 +378,47 @@ def calculate_total_state(hunger, fatigue, entertain, money_need):
         
 
 def check_total_state(user_id, char_id, name, gender, new_total_state):
+        
     # Проверка общего уровня здоровья
-        if new_total_state <= 20:
+        logger.info(f"Уровень стресса {new_total_state}")    
+        if new_total_state <= STATE_LOSE_LOWER_BOUND:
             lose(user_id, char_id, gender)    
-        elif new_total_state <= 30:
+        elif new_total_state <= STATE_RED_LOWER_BOUND:
             phrases = [
             "Последнее предупреждение.Дальше – чемоданы.",
             "Это уже тревожный звоночек.Очень тревожный!",
             "Мы почти на грани.Я серьезно."            
             ]
+            replace_avatar_foto_in_db(user_id, gender, 0, 2)
             bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")            
-        elif new_total_state <= 50:
+        elif new_total_state <= STATE_YELLOW_UPPER_BOUND:
             phrases = [
             "Я еще держусь, но это уже не мой лучший день.",
             "Я не паникую.Но повода для радости тоже мало.",
             "Так… у нас тут уже не идеально.Я начинаю чувствовать себя забытым."
             ]
+            replace_avatar_foto_in_db(user_id, gender, 0, 1)
             bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")
-        elif new_total_state <= 80:
+        elif new_total_state <= STATE_GREEN_LOWER_BOUND:
             phrases = [
             "Хмм… кажется, у нас тут легкий эмоциональный сквозняк.\nНичего критичного, но лучше заглянуть.",
             "Алло! Всё ок, но не на 100%.\nПроверь, как я там, пожалуйста.",
             "Мне вроде нормально. Но с тобой было бы лучше 😢"
             ]
+            replace_avatar_foto_in_db(user_id, gender, 0, 1)
             bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
+        else:
+            replace_avatar_foto_in_db(user_id, gender, 0, 0)
+
+
+
+def replace_avatar_foto_in_db(user_id, gender, selected_number, level):
+    filename = f'men_{selected_number}_{level}.png' if gender == 'male' else f'women_{selected_number}_{level}.png'
+    full_path = os.path.join('pic\pic_avatar', filename)   
+
+    with open(full_path, 'rb') as f:
+        new_photo_bytes = f.read()           
+        update_or_insert_character_photo(user_id, new_photo_bytes)
 
 def check_character_old (user_id, char_id, created_at, gender):
     # Проверка возраста персонажа
@@ -417,7 +433,7 @@ def win(user_id, char_id, gender):
     element=getPromo()
     сongratulation_text = CONGRATULATION_TEXT.format(element)           
 
-    picture_path = "pic/women_win.jpg" if gender == "male" else "pic/man_win.jpg"
+    picture_path = "pic/women_win.jpg" if gender == "male" else "pic/men_win.jpg"
     with open(picture_path, 'rb') as photo:
         bot.send_photo(user_id, photo, caption=сongratulation_text, reply_markup=create_keyboard_for_new_user(),parse_mode="HTML")           
     
@@ -425,7 +441,7 @@ def win(user_id, char_id, gender):
 def lose(user_id, char_id, gender):
     delete_character_from_db(char_id)
     fail_text = FAIL_TEXT_MAN if gender == "male" else FAIL_TEXT_WOMEN            
-    picture_path = "pic/women_lose.jpg" if gender == "male" else "pic/man_lose.jpg"
+    picture_path = "pic/women_lose.jpg" if gender == "male" else "pic/men_lose.jpg"
                 # Отправляем картинку пользователю
     with open(picture_path, 'rb') as photo:
         bot.send_photo(user_id, photo, caption=fail_text, reply_markup=create_keyboard_for_new_user(),parse_mode="HTML")           

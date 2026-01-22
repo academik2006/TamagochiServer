@@ -46,7 +46,7 @@ def add_user_to_database(user_id, username):
     # Передаем параметры через tuple
     execute_query(query, (user_id, username))
 
-def fetch_character_photo(user_id):
+def get_character_photo_from_db(user_id):
     """
     Возвращает фотографию персонажа из базы данных.
     
@@ -59,7 +59,28 @@ def fetch_character_photo(user_id):
     if len(result) > 0 and result[0][0]:
         return result[0][0]
     else:
-        return None    
+        return None   
+
+def update_or_insert_character_photo(user_id, new_photo_bytes):
+    """
+    Записывает новое фото персонажа в базу данных.
+    Если запись с данным user_id существует, обновляет фото.
+    Иначе создаёт новую запись с указанным фото.
+
+    :param user_id: ID пользователя
+    :param new_photo_bytes: binary data (bytes object) нового фото
+    """
+    query_check = "SELECT COUNT(*) FROM characters WHERE user_id=?"
+    check_result = execute_query(query_check, (user_id,))
+
+    if check_result[0][0] > 0:
+        # Пользователь найден, выполняем обновление
+        update_query = "UPDATE characters SET photo=? WHERE user_id=?"
+        execute_query(update_query, (new_photo_bytes, user_id))
+    else:
+        # Пользователя нет, добавляем новую запись
+        insert_query = "INSERT INTO characters (user_id, photo) VALUES (?, ?)"
+        execute_query(insert_query, (user_id, new_photo_bytes))     
 
 def add_character_to_database(user_id, name, gender, bio):
     """
@@ -152,5 +173,5 @@ def create_db():
             total_state REAL DEFAULT 100,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(user_id) REFERENCES users(user_id)
-)
-''')   
+        )
+        ''')   
