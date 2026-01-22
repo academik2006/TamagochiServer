@@ -157,7 +157,7 @@ def handle_select_standard(call):
 
     # Показ стандартных изображений
     for i in range(4):
-        filename = f'men_{i}.png' if gender == 'male' else f'girl_{i}.png'
+        filename = f'men_{i}.png' if gender == 'male' else f'women_{i}.png'
         full_path = os.path.join('pic', filename)
         with open(full_path, 'rb') as f:
             img_data = f.read()
@@ -176,7 +176,7 @@ def handle_select_standard_photo(call):
     selected_number = int(call.data.split(':')[1]) - 1  # Преобразование номера в индекс массива
     chat_id = call.message.chat.id
     gender = user_data[chat_id]['gender']
-    filename = f'men_{selected_number}.png' if gender == 'male' else f'girl_{selected_number}.png'
+    filename = f'men_{selected_number}.png' if gender == 'male' else f'women_{selected_number}.png'
     full_path = os.path.join('pic', filename)
     with open(full_path, 'rb') as f:
         user_data[chat_id]['photo'] = f.read()           
@@ -196,39 +196,42 @@ def send_random_message(chat_id, param_name, gender):
 def draw_progress_bars(image, hunger, fatigue, entertain, money_need):
     """
     Рисует горизонтальные прогресс-бары поверх изображения.
-    """
-    # Размер шрифта и отступы
-    font_size = 20
+    """        
     bar_height = 10
-    padding = 10
-    margin_top = image.height - ((bar_height + padding) * 4) - 40  # Отступ 40 px
-    
-    # Загрузка шрифта
-    font = ImageFont.truetype("arial.ttf", size=font_size)
-    
+    padding = 20
+    margin_top = image.height - ((bar_height + padding) * 4) - 50  # Отступ 50 px
+            
     # Создание копии изображения для рисования
     draw = ImageDraw.Draw(image)
     
     # Цвета
     bg_color = "#ffffff"
-    fg_color = "#ff0000"
-    label_color = "#000000"
+        
+    values = [(hunger, "#ff0000"), (fatigue, "#e75c0c"), (entertain, "#e6d708"), (money_need, "#0ceb2a")]
+    # Иконки
+    icons = ['pic/icon_hunger.png', 'pic/icon_fatigue.png', 'pic/icon_entertain.png', 'pic/icon_money.png']
     
-    values = [(hunger, "Голод"), (fatigue, "Усталость"), (entertain, "Развлечения"), (money_need, "Забота")]
     
-    for i, (value, label) in enumerate(values):
+    for i, (value, color) in enumerate(values):
         y_pos = margin_top + (i * (bar_height + padding)) + padding
+
+        #Загрузка иконки
+        icon_path = icons[i]
+        icon = Image.open(icon_path)
+        icon = icon.resize((20, 20))  # Уменьшаем иконку до нужного размера
+        
+        # Размещаем иконку перед прогресс-баром
+        image.paste(icon, (15, y_pos-5), icon)
+
+        padding_progress_bar = 40
         
         # Рисование фона прогресс-бара
-        draw.rectangle([padding, y_pos, image.width - padding, y_pos + bar_height], fill=bg_color)
-        
+        draw.rectangle([padding_progress_bar, y_pos, image.width - padding_progress_bar, y_pos + bar_height], fill=bg_color)
+                        
         # Прогресс-бар заполненный цветом
-        progress_width = value / 100 * (image.width - 2*padding)
-        draw.rectangle([padding, y_pos, padding+progress_width, y_pos + bar_height], fill=fg_color)
-        
-        # Подпись над каждой полосой
-        draw.text((padding, y_pos - font_size), label, font=font, fill=label_color)
-    
+        progress_width = value / 100 * (image.width - 2*padding_progress_bar)
+        draw.rectangle([padding_progress_bar, y_pos, padding_progress_bar+progress_width, y_pos + bar_height], fill=color)        
+                    
     return image
 
 
@@ -259,15 +262,25 @@ def create_character(user_id):
 def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need):
     
     original_img = fetch_character_photo(user_id)
-    img = Image.open(io.BytesIO(original_img))           
+    img_avatar = Image.open(io.BytesIO(original_img))     
+    font_size = 14
+
+    font = ImageFont.truetype("arial_bold.ttf", size=font_size)      
     
     # Загружаем фоновый файл
     background_path = os.path.join('pic', 'back_avatar.png')
-    img = img.resize((img.width // 4, img.height // 4))
+    img_avatar = img_avatar.resize((img_avatar.width, img_avatar.height))
     background = Image.open(background_path)
+    x_avatar = 40
+    y_avatar = 40
     
     # Размещаем уменьшенное изображение на фоне
-    background.paste(img, (40, 40))
+    background.paste(img_avatar, (x_avatar, y_avatar))
+
+    # Рисуем имя персонажа над аватаром
+    draw = ImageDraw.Draw(background)
+    text_position = (x_avatar + 35, y_avatar - 25)  # Позиция текста (x, y)
+    draw.text(text_position, name, font=font, fill="#000000")
     
     # Применяем функцию рисования шкал
     final_img = draw_progress_bars(background, hunger, fatigue, entertain, money_need)
@@ -398,7 +411,7 @@ def check_money_need(user_id, gender, money_need):
         if gender == 'female':
             message = "😘 Алло, а где мои обнимашки?\nИсправь."
         elif gender == 'male':
-            message = "🙃 Алло, а где мои обнимашки?\nИсправь."
+            message = "Алло, а где мои обнимашки?\nИсправь."
         bot.send_message(user_id, message, parse_mode="HTML")
             
 

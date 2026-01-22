@@ -93,9 +93,13 @@ def update_character_parameter(user_id, param_name, value_change):
 
     # Если новое значение больше 100, возвращаем признак для отправки сообщения
     need_send_message = False
+
     if new_value > 100:
-        new_value = 100
-        need_send_message = True
+        new_value = 100        
+
+    if current_value == 100:
+       new_value = 100
+       need_send_message = True    
 
     # Обновляем базу данных
     update_query = f"UPDATE characters SET {param_name}=? WHERE user_id=?"

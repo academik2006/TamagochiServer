@@ -101,7 +101,7 @@ MESSAGES_BY_PARAM_AND_GENDER = {
             "Я уже не голоден"
         ]
     },
-    'money_need': {
+    'money_needs': {
         'female': [
             "Деньги есть, паники уже нет",
             "Я уже финансово спокойна",
@@ -127,7 +127,7 @@ MESSAGES_BY_PARAM_AND_GENDER = {
             "Я уже доволен на 100%"
         ]
     },
-    'entertain': {
+    'entertainment': {
         'female': [
             "Я уже вся в любви",
             "Я и так уже растаяла",
