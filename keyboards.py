@@ -29,11 +29,8 @@ def create_keyboard_for_new_user():
     return create_keyboard (buttons, False)
 
 def create_keyboard_for_continue():
-
-    buttons = [
-        'Проведать любимку ❤️'        
-    ]
-    return create_keyboard (buttons, True)
+    buttons = [("Проведать любимку ❤️", "visit_avatar")]
+    return create_inline_keyboard(buttons)
 
 def create_keyboard_for_chatacter_avatar(gender):
     buttons = []

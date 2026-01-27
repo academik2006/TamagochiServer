@@ -85,9 +85,7 @@ def handle_buttons(message):
         bot.send_message(message.chat.id, "Теперь выбери имя своего персонажа (не более 30 символов, буквы и цифры).")
         bot.register_next_step_handler(message, process_character_name)
     elif text.startswith("создать персонажа"):        
-        bot.send_message(user_id, "Выбери пол своего персонажа", reply_markup=create_keyboard_for_choose_gender())        
-    elif text.startswith("проведать любимку"):        
-        check_character_and_send_status(user_id)    
+        bot.send_message(user_id, "Выбери пол своего персонажа", reply_markup=create_keyboard_for_choose_gender())
     else:
         pass   
 
@@ -109,7 +107,14 @@ def handle_button_click(call):
         chat_id = call.message.chat.id
         bot.send_message(chat_id, "Отправьте вашу фотографию.")
         bot.register_next_step_handler_by_chat_id(chat_id, process_user_photo) 
-    else:
+    elif callback_data == 'visit_avatar':
+        try:
+            # Скрываем клавиатуру после нажатия
+            bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=None)
+        except Exception as e:
+            print(f"Error removing keyboard: {e}")
+        check_character_and_send_status(chat_id)    
+    else:        
         bot.send_message(chat_id, "Неверное действие.")
 
     # Подтверждение сервера о принятии нажатия кнопки
