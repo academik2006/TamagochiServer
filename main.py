@@ -538,8 +538,8 @@ def run_timer():
         # Выбираем диапазон часов, в течение которого будем обновлять персонажей
         #if 9 <= current_time.hour <= 16 and current_time.minute == 0:
         hourly_update_characters()
-        time.sleep(60)  # Проверяем каждую минуту      
-        #time.sleep(7200)  # Проверяем каждые два часа
+        #time.sleep(60)  # Проверяем каждую минуту      
+        time.sleep(7200)  # Проверяем каждые два часа
 
 # Запускаем таймер в отдельном потоке
 timer_thread = Thread(target=run_timer)
