@@ -82,19 +82,11 @@ def update_or_insert_character_photo(user_id, new_photo_bytes):
         insert_query = "INSERT INTO characters (user_id, photo) VALUES (?, ?)"
         execute_query(insert_query, (user_id, new_photo_bytes))     
 
-def add_character_to_database(user_id, name, gender, bio):
-    """
-    Добавляет персонаж в таблицу characters.
-    
-    :param user_id: ID пользователя, которому принадлежит персонаж
-    :param name: Имя персонажа
-    :param gender: Пол персонажа
-    :param bio: Биография персонажа (предполагаю, что это фотография или описание)
-    """
+def add_character_to_database(user_id, name, gender, photo_blob, standart_photo_number):
     query = """
-        INSERT INTO characters (user_id, name, gender, photo) VALUES (?,?,?,?)
+        INSERT INTO characters (user_id, name, gender, photo, standart_photo_number) VALUES (?,?,?,?,?)
     """
-    execute_query(query, (user_id, name, gender, bio))
+    execute_query(query, (user_id, name, gender, photo_blob, standart_photo_number))
 
 def update_character_parameter(user_id, param_name, value_change):
     """
@@ -127,6 +119,11 @@ def update_character_parameter(user_id, param_name, value_change):
     execute_query(update_query, (new_value, user_id))
 
     return need_send_message, gender
+
+def get_current_avatar_param (user_id):
+    result = execute_query("SELECT * FROM characters WHERE user_id=?", (user_id,))       
+    character_data = result[0]    
+    return character_data
 
 def delete_character_from_db(char_id):
     """
@@ -171,6 +168,7 @@ def create_db():
             entertainment REAL DEFAULT 100,
             money_needs REAL DEFAULT 100,
             total_state REAL DEFAULT 100,
+            standart_photo_number REAL DEFAULT -127,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(user_id) REFERENCES users(user_id)
         )

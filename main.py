@@ -20,6 +20,7 @@ STATE_LOSE_LOWER_BOUND = 20
 STATE_RED_LOWER_BOUND = 30
 STATE_YELLOW_UPPER_BOUND = 50
 STATE_GREEN_LOWER_BOUND = 80
+NO_STANDART_FOTO = -127
 
 bot = telebot.TeleBot(API_TOKEN)
 bot.delete_webhook()
@@ -86,30 +87,33 @@ def handle_buttons(message):
     elif text.startswith("создать персонажа"):        
         bot.send_message(user_id, "Выбери пол своего персонажа", reply_markup=create_keyboard_for_choose_gender())        
     elif text.startswith("проведать любимку"):        
-        check_character_and_send_status(user_id)
-
-    elif text.startswith("покормить роллами"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'hunger', +40)        
-    elif text.startswith("заказать"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'hunger', +40) 
-
-    elif text.startswith("сводить в"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'fatigue', +20)
-    elif text.startswith("положить на диван перед телевизором"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'fatigue', +20)
-    
-    elif text.startswith("отпустить с пацанами в баню"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'entertainment', +20)
-    elif text.startswith("скинуть денежки на карту"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'entertainment', +20)                          
-
-    elif text.startswith("обнять и поцеловать"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'money_needs', +20)
-    elif text.startswith("похвалить и сказать"):
-        ugrade_character_parameter_and_show_new_avatar(user_id, 'money_needs', +20)                
-    
+        check_character_and_send_status(user_id)    
     else:
-        pass        
+        pass   
+
+@bot.callback_query_handler(func=lambda call: True)
+def handle_button_click(call):
+    chat_id = call.message.chat.id
+    callback_data = call.data
+    
+    # Обрабатываем каждое действие отдельно
+    if callback_data == 'action_hunger':
+        ugrade_character_parameter_and_show_new_avatar(chat_id, 'hunger', +40)                
+    elif callback_data == 'action_fatigue':
+        ugrade_character_parameter_and_show_new_avatar(chat_id, 'fatigue', +20)
+    elif callback_data == 'action_entertainment':
+        ugrade_character_parameter_and_show_new_avatar(chat_id, 'entertainment', +20)
+    elif callback_data == 'action_kiss':
+        ugrade_character_parameter_and_show_new_avatar(chat_id, 'money_needs', +20)                
+    elif callback_data == 'load_own':
+        chat_id = call.message.chat.id
+        bot.send_message(chat_id, "Отправьте вашу фотографию.")
+        bot.register_next_step_handler_by_chat_id(chat_id, process_user_photo) 
+    else:
+        bot.send_message(chat_id, "Неверное действие.")
+
+    # Подтверждение сервера о принятии нажатия кнопки
+    bot.answer_callback_query(call.id)
 
 
 def ugrade_character_parameter_and_show_new_avatar (user_id, param_name, value_change):
@@ -119,6 +123,19 @@ def ugrade_character_parameter_and_show_new_avatar (user_id, param_name, value_c
         send_random_message(user_id, param_name, gender)    
         return
     
+    char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, _ = get_current_avatar_param(user_id)
+    new_total_state = calculate_total_state(hunger, fatigue, entertain, money_need)        
+    update_character_stats(max(hunger,0), max(fatigue,0), max(entertain,0), max(money_need,0), max(new_total_state,0), char_id)       
+    
+    if new_total_state <= STATE_RED_LOWER_BOUND:            
+        replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 2)            
+    elif new_total_state <= STATE_YELLOW_UPPER_BOUND:            
+        replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1)            
+    elif new_total_state <= STATE_GREEN_LOWER_BOUND:            
+        replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1)            
+    else:
+        replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 0)
+
     check_character_and_send_status(user_id)
 
 def process_character_name(message):
@@ -135,33 +152,51 @@ def is_valid_name(name):
     """Проверяет длину имени и наличие спецсимволов."""
     return len(name.strip()) <= 30 and all(char.isalnum() or char.isspace() for char in name) 
 
-@bot.callback_query_handler(func=lambda call: call.data == 'load_own')
-def handle_load_own(call):
-    chat_id = call.message.chat.id
-    bot.send_message(chat_id, "Отправьте вашу фотографию.")
-    bot.register_next_step_handler_by_chat_id(chat_id, process_user_photo)
+def resize_proportionally(img, max_width=300, max_height=446):
+    """Масштабирует изображение, сохраняя пропорции, и ограничивая максимальные размеры."""
+    orig_width, orig_height = img.size
+    
+    # Проверяем, нужно ли уменьшать изображение
+    if orig_width > max_width or orig_height > max_height:
+        # Рассчитываем масштабы уменьшения
+        width_scale = max_width / orig_width
+        height_scale = max_height / orig_height
+        scale_factor = min(width_scale, height_scale)
+        
+        # Высчитываем новые размеры
+        new_width = round(orig_width * scale_factor)
+        new_height = round(orig_height * scale_factor)
+    else:
+        # Если изображение уже достаточно маленькое, ничего не делаем
+        new_width, new_height = orig_width, orig_height
+    
+    # Масштабируем изображение
+    resized_img = img.resize((new_width, new_height), Image.LANCZOS)
+    return resized_img
 
 def process_user_photo(message):
     if message.content_type != 'photo':
         bot.reply_to(message, "Это не фотография. Пожалуйста, отправьте фото.")
-        return    
+        return
+    
+    # Загружаем файл
     file_info = bot.get_file(message.photo[-1].file_id)
-    # Скачиваем файл
     downloaded_file = bot.download_file(file_info.file_path)
 
-    # Преобразование байтов файла в объект изображения
+    # Открываем изображение
     img = Image.open(io.BytesIO(downloaded_file))
 
-    # Изменение размера изображения
-    resized_img = img.resize((95, 109), Image.LANCZOS)
+    # Меняем размер изображения, сохраняя пропорции
+    resized_img = resize_proportionally(img, max_width=300, max_height=446)
 
-    # Конвертируем обратно в bytes
+    # Сохраняем картинку в памяти
     buffered = io.BytesIO()
-    resized_img.save(buffered, format="PNG")  # Можно выбрать другой формат, если нужен PNG или другое
+    resized_img.save(buffered, format="JPEG")
     resized_image_bytes = buffered.getvalue()
-    
+
+    # Сохраняем фотографию в user_data
     user_data[message.chat.id]['photo'] = resized_image_bytes
-    bot.send_message(message.chat.id, "Фотография принята.", reply_markup=types.ReplyKeyboardRemove())    
+    bot.send_message(message.chat.id, "Фотография принята.", reply_markup=types.ReplyKeyboardRemove())
     create_character(message.chat.id)
 
 @bot.callback_query_handler(func=lambda call: call.data == 'select_standard')
@@ -191,6 +226,8 @@ def handle_select_standard_photo(call):
     selected_number = int(call.data.split(':')[1]) - 1  # Преобразование номера в индекс массива
     chat_id = call.message.chat.id
     gender = user_data[chat_id]['gender']
+    user_data[chat_id]['standart_photo_number'] = selected_number
+    
     filename = f'men_{selected_number}_0.png' if gender == 'male' else f'women_{selected_number}_0.png'
     full_path = os.path.join('pic\pic_avatar', filename)   
 
@@ -225,7 +262,7 @@ def draw_progress_bars(image, hunger, fatigue, entertain, money_need):
         
     values = [(hunger, "#ff0000"), (fatigue, "#e75c0c"), (entertain, "#e6d708"), (money_need, "#0ceb2a")]
     # Иконки
-    icons = ['pic/icon_hunger.png', 'pic/icon_fatigue.png', 'pic/icon_entertain.png', 'pic/icon_money.png']
+    icons = ['pic/icon_hunger.png', 'pic/icon_fatigue.png', 'pic/icon_entertain.png', 'pic/icon_lovely.png']
     padding_progress_bar = 140
         
     for i, (value, color) in enumerate(values):
@@ -259,14 +296,17 @@ def create_character(user_id):
     data = user_data.pop(user_id)
     gender = data['gender']
     name = data.get('name', None)  # Если имя ещё не задано, оставляем None
-    photo_blob = data.get('photo', None)           
+    photo_blob = data.get('photo', None)
+    standart_photo_number = int(data.get('standart_photo_number', NO_STANDART_FOTO))
   
-    add_character_to_database(user_id, name, gender, photo_blob)            
+    add_character_to_database(user_id, name, gender, photo_blob,standart_photo_number)            
     bot.send_message(user_id, f"Персонаж успешно создан!")
     check_character_and_send_status(user_id)  
 
 
 def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state):
+
+    logger.info(f"Запустилась функция показа аватара {total_state}")
     
     img_avatar = get_avatar_image(user_id,total_state)            
     
@@ -319,7 +359,7 @@ def get_avatar_image(user_id, total_state):
 
 def add_frame_to_image(img_avatar, color):
     draw = ImageDraw.Draw(img_avatar)
-    width = 2  # Ширина рамки в пикселях
+    width = 15  # Ширина рамки в пикселях
     size = img_avatar.size  # Размер изображения
     
     # Рисование рамки по краям изображения
@@ -331,15 +371,9 @@ def add_frame_to_image(img_avatar, color):
    
 
 def check_character_and_send_status(user_id):
-    global last_message_id
-    result = execute_query("SELECT * FROM characters WHERE user_id=?", (user_id,))
+    global last_message_id    
     
-    # Проверяем, есть ли результат вообще
-    if not result or len(result) == 0:
-        return bot.send_message(user_id, "Ваш персонаж отсутствует.", reply_markup=create_keyboard_for_new_user())
-    
-    character_data = result[0]    
-    char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, _ = character_data      
+    char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, _ = get_current_avatar_param(user_id)
     keyboard = create_keyboard_for_chatacter_avatar(gender)
 
     if last_message_id is None:
@@ -356,7 +390,7 @@ def hourly_update_characters():
     result = execute_query("SELECT * FROM characters")
     all_chars = result
         
-    for char_id, user_id, name, gender, _, hunger, fatigue, entertain, money_need, total_state, created_at in all_chars:
+    for char_id, user_id, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number,created_at in all_chars:
         hunger -= 10
         fatigue -= 5
         entertain -= 5
@@ -370,14 +404,15 @@ def hourly_update_characters():
         check_fatigue(user_id,gender,hunger)
         check_money_need(user_id,gender,hunger)
 
-        check_total_state(user_id,char_id,name,gender,max(new_total_state,0))        
-        check_character_old(user_id, char_id, created_at,gender) 
+        check_total_state(user_id,char_id,name,gender,max(new_total_state,0),standart_photo_number)        
+        check_character_old(user_id, char_id, created_at,gender)
+        
 
 def calculate_total_state(hunger, fatigue, entertain, money_need):
     return sum([hunger, fatigue, entertain, money_need]) / 4                                                
         
 
-def check_total_state(user_id, char_id, name, gender, new_total_state):
+def check_total_state(user_id, char_id, name, gender, new_total_state,standart_photo_number):
         
     # Проверка общего уровня здоровья
         logger.info(f"Уровень стресса {new_total_state}")    
@@ -389,7 +424,7 @@ def check_total_state(user_id, char_id, name, gender, new_total_state):
             "Это уже тревожный звоночек.Очень тревожный!",
             "Мы почти на грани.Я серьезно."            
             ]
-            replace_avatar_foto_in_db(user_id, gender, 0, 2)
+            replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 2)
             bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")            
         elif new_total_state <= STATE_YELLOW_UPPER_BOUND:
             phrases = [
@@ -397,7 +432,7 @@ def check_total_state(user_id, char_id, name, gender, new_total_state):
             "Я не паникую.Но повода для радости тоже мало.",
             "Так… у нас тут уже не идеально.Я начинаю чувствовать себя забытым."
             ]
-            replace_avatar_foto_in_db(user_id, gender, 0, 1)
+            replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1)
             bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")
         elif new_total_state <= STATE_GREEN_LOWER_BOUND:
             phrases = [
@@ -405,15 +440,21 @@ def check_total_state(user_id, char_id, name, gender, new_total_state):
             "Алло! Всё ок, но не на 100%.\nПроверь, как я там, пожалуйста.",
             "Мне вроде нормально. Но с тобой было бы лучше 😢"
             ]
-            replace_avatar_foto_in_db(user_id, gender, 0, 1)
+            replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1)
             bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
         else:
-            replace_avatar_foto_in_db(user_id, gender, 0, 0)
+            replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 0)
 
 
 
-def replace_avatar_foto_in_db(user_id, gender, selected_number, level):
-    filename = f'men_{selected_number}_{level}.png' if gender == 'male' else f'women_{selected_number}_{level}.png'
+def replace_avatar_foto_in_db(user_id, gender, standart_photo_number, level):
+    
+    if standart_photo_number == NO_STANDART_FOTO:
+        return
+    
+    standart_foto_number_int = int(standart_photo_number)
+
+    filename = f'men_{standart_foto_number_int}_{level}.png' if gender == 'male' else f'women_{standart_foto_number_int}_{level}.png'
     full_path = os.path.join('pic\pic_avatar', filename)   
 
     with open(full_path, 'rb') as f:
