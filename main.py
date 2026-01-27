@@ -113,7 +113,11 @@ def handle_button_click(call):
             bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=None)
         except Exception as e:
             print(f"Error removing keyboard: {e}")
-        check_character_and_send_status(chat_id)    
+        check_character_and_send_status(chat_id)
+    elif callback_data == 'select_standard':
+        select_standard_photo(chat_id)
+    elif callback_data.startswith('select:'):
+        select_standard_photo_handler(call)
     else:        
         bot.send_message(chat_id, "Неверное действие.")
 
@@ -204,9 +208,8 @@ def process_user_photo(message):
     bot.send_message(message.chat.id, "Фотография принята.", reply_markup=types.ReplyKeyboardRemove())
     create_character(message.chat.id)
 
-@bot.callback_query_handler(func=lambda call: call.data == 'select_standard')
-def handle_select_standard(call):
-    chat_id = call.message.chat.id
+
+def select_standard_photo(chat_id):    
     gender = user_data[chat_id]['gender']
     buttons = []           
 
@@ -226,8 +229,7 @@ def handle_select_standard(call):
     keyboard = types.InlineKeyboardMarkup().add(*buttons)
     bot.send_message(chat_id, "Выберите одну из фотографий:", reply_markup=keyboard)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('select:'))
-def handle_select_standard_photo(call):
+def select_standard_photo_handler(call):
     selected_number = int(call.data.split(':')[1]) - 1  # Преобразование номера в индекс массива
     chat_id = call.message.chat.id
     gender = user_data[chat_id]['gender']
