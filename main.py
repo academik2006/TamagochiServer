@@ -216,7 +216,7 @@ def select_standard_photo(chat_id):
     # Показ стандартных изображений
     for i in range(4):
         filename = f'men_{i}_0.png' if gender == 'male' else f'women_{i}_0.png'
-        full_path = os.path.join('pic\pic_avatar', filename)
+        full_path = os.path.join('pic','pic_avatar', filename)
         with open(full_path, 'rb') as f:
             img_data = f.read()
         
@@ -236,7 +236,7 @@ def select_standard_photo_handler(call):
     user_data[chat_id]['standart_photo_number'] = selected_number
     
     filename = f'men_{selected_number}_0.png' if gender == 'male' else f'women_{selected_number}_0.png'
-    full_path = os.path.join('pic\pic_avatar', filename)   
+    full_path = os.path.join('pic','pic_avatar', filename)   
 
     with open(full_path, 'rb') as f:
         user_data[chat_id]['photo'] = f.read()           
@@ -317,8 +317,7 @@ def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain,
     
     img_avatar = get_avatar_image(user_id,total_state)            
     
-    # Загружаем фоновый файл
-    #background_path = os.path.join('pic', 'back_avatar.png')    
+    # Загружаем фоновый файл    
     background_path = os.path.join('pic', 'back_big.png')    
     background_img = Image.open(background_path)
     x_avatar = background_img.width // 2 - img_avatar.width // 2 
@@ -462,7 +461,7 @@ def replace_avatar_foto_in_db(user_id, gender, standart_photo_number, level):
     standart_foto_number_int = int(standart_photo_number)
 
     filename = f'men_{standart_foto_number_int}_{level}.png' if gender == 'male' else f'women_{standart_foto_number_int}_{level}.png'
-    full_path = os.path.join('pic\pic_avatar', filename)   
+    full_path = os.path.join('pic','pic_avatar', filename)   
 
     with open(full_path, 'rb') as f:
         new_photo_bytes = f.read()           
