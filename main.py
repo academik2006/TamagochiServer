@@ -303,10 +303,9 @@ def create_character(user_id):
     standart_photo_number = int(data.get('standart_photo_number', NO_STANDART_FOTO))
     photo_blob = data.get('photo', None)
       
-    add_character_to_database(user_id, name, gender, photo_blob,standart_photo_number)            
-    # Получаем изображение с рамкой
-    framed_avatar_data = get_avatar_image_with_frame_color(user_id, gender, standart_photo_number, 0, 100)               
-    add_character_to_database(user_id, name, gender, framed_avatar_data,standart_photo_number)                
+    add_character_to_database(user_id, name, gender, photo_blob,standart_photo_number)                
+    replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 0, 100)
+    
     bot.send_message(user_id, text="Ваш персонаж успешно создан!", reply_markup = create_keyboard_for_info())
     check_character_and_send_status(user_id)  
 
