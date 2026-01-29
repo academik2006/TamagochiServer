@@ -30,8 +30,6 @@ logger = logging.getLogger(__name__)
 
 # Словарь для временного хранения данных пользователей
 user_data = {}
-# ID последнего отправленного сообщения
-last_message_id = None
 
 async def main():    
     logger.info("Бот запущен")
@@ -116,7 +114,7 @@ def handle_button_click(call):
         check_character_and_send_status(chat_id)
     elif callback_data == 'select_standard':
         select_standard_photo(chat_id)
-    elif callback_data.startswith('select:'):
+    elif callback_data.startswith('select:'):       
         select_standard_photo_handler(call)
     else:        
         bot.send_message(chat_id, "Неверное действие.")
@@ -137,13 +135,13 @@ def ugrade_character_parameter_and_show_new_avatar (user_id, param_name, value_c
     update_character_stats(max(hunger,0), max(fatigue,0), max(entertain,0), max(money_need,0), max(new_total_state,0), char_id)       
     
     if new_total_state <= STATE_RED_LOWER_BOUND:            
-        replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 2)            
+        replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 2, total_state)            
     elif new_total_state <= STATE_YELLOW_UPPER_BOUND:            
-        replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1)            
+        replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1, total_state)            
     elif new_total_state <= STATE_GREEN_LOWER_BOUND:            
-        replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1)            
+        replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1, total_state)            
     else:
-        replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 0)
+        replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 0, total_state)
 
     check_character_and_send_status(user_id)
 
@@ -298,24 +296,24 @@ def send_character_image_with_progress(user_id, img_bytes, keyboard=None):
     sent_message = bot.send_photo(user_id, bio, reply_markup=keyboard)    
     return sent_message.message_id               
 
-
 def create_character(user_id):    
     data = user_data.pop(user_id)
     gender = data['gender']
     name = data.get('name', None)  # Если имя ещё не задано, оставляем None
-    photo_blob = data.get('photo', None)
     standart_photo_number = int(data.get('standart_photo_number', NO_STANDART_FOTO))
-  
+    photo_blob = data.get('photo', None)
+      
     add_character_to_database(user_id, name, gender, photo_blob,standart_photo_number)            
-    bot.send_message(user_id, f"Персонаж успешно создан!")
+    # Получаем изображение с рамкой
+    framed_avatar_data = get_avatar_image_with_frame_color(user_id, gender, standart_photo_number, 0, 100)               
+    add_character_to_database(user_id, name, gender, framed_avatar_data,standart_photo_number)                
+    bot.send_message(user_id, text="Ваш персонаж успешно создан!", reply_markup = create_keyboard_for_info())
     check_character_and_send_status(user_id)  
 
-
 def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state):
-
-    logger.info(f"Запустилась функция показа аватара {total_state}")
-    
-    img_avatar = get_avatar_image(user_id,total_state)            
+        
+    img_avatar_bytes = get_character_photo_from_db(user_id)
+    img_avatar = convert_byte_image_to_png(img_avatar_bytes)
     
     # Загружаем фоновый файл    
     background_path = os.path.join('pic', 'back_big.png')    
@@ -343,25 +341,28 @@ def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain,
     
     return output_buffer.read()
 
-def get_avatar_image(user_id, total_state):    
-    original_img = get_character_photo_from_db(user_id)
-    img_avatar = Image.open(io.BytesIO(original_img))    
+def convert_byte_image_to_png (image_byte):
+    return Image.open(io.BytesIO(image_byte))
 
-    if total_state <= STATE_RED_LOWER_BOUND:
+def get_avatar_image_with_frame_color(user_id, gender, standart_photo_number, level, new_total_state):
+    original_img = get_character_photo_from_db(user_id)
+    img_avatar = Image.open(io.BytesIO(original_img))
+
+    if new_total_state <= STATE_RED_LOWER_BOUND:
         frame_color = "#FF0000"  # Красный
-    elif total_state <= STATE_YELLOW_UPPER_BOUND:
-        frame_color = "#FFFF00"  # Жёлтый
-    elif total_state <= STATE_GREEN_LOWER_BOUND:
-        frame_color = "#FFFF00"  # Жёлтый
+    elif new_total_state <= STATE_YELLOW_UPPER_BOUND:
+        frame_color = "#FFFF00"  # Желтый
+    elif new_total_state <= STATE_GREEN_LOWER_BOUND:
+        frame_color = "#FFFF00"  # Желтый
     else:
-        frame_color = "#00FF00"  # Зелёный        
-        
+        frame_color = "#00FF00"  # Зеленый
+
     framed_avatar = add_frame_to_image(img_avatar.copy(), frame_color)
-    
-    # Сохраняем обработанное изображение
+
+    # Сохраняем обработанное изображение в BytesIO
     buffered = io.BytesIO()
     framed_avatar.save(buffered, format="PNG")
-    return framed_avatar
+    return buffered.getvalue()  # Вернем байтовые данные
 
 def add_frame_to_image(img_avatar, color):
     draw = ImageDraw.Draw(img_avatar)
@@ -381,15 +382,8 @@ def check_character_and_send_status(user_id):
     
     char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, _ = get_current_avatar_param(user_id)
     keyboard = create_keyboard_for_chatacter_avatar(gender)
-
-    if last_message_id is None:
-        img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state)
-        last_message_id = send_character_image_with_progress(user_id, img_bytes,keyboard)
-    else:
-        new_img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state)
-        bot.delete_message(user_id, last_message_id)
-        last_message_id = send_character_image_with_progress(user_id, new_img_bytes,keyboard)
-  
+    img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state)
+    send_character_image_with_progress(user_id, img_bytes,keyboard)    
 
 def hourly_update_characters():   
         
@@ -399,8 +393,8 @@ def hourly_update_characters():
     for char_id, user_id, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number,created_at in all_chars:
         hunger -= 10
         fatigue -= 5
-        entertain -= 5
-        money_need -= 5
+        entertain -= 7
+        money_need -= 6
         
         new_total_state = calculate_total_state(hunger, fatigue, entertain, money_need)        
         update_character_stats(max(hunger,0), max(fatigue,0), max(entertain,0), max(money_need,0), max(new_total_state,0), char_id)     
@@ -430,7 +424,7 @@ def check_total_state(user_id, char_id, name, gender, new_total_state,standart_p
             "Это уже тревожный звоночек.Очень тревожный!",
             "Мы почти на грани.Я серьезно."            
             ]
-            replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 2)
+            replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 2, new_total_state)
             bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")            
         elif new_total_state <= STATE_YELLOW_UPPER_BOUND:
             phrases = [
@@ -438,7 +432,7 @@ def check_total_state(user_id, char_id, name, gender, new_total_state,standart_p
             "Я не паникую.Но повода для радости тоже мало.",
             "Так… у нас тут уже не идеально.Я начинаю чувствовать себя забытым."
             ]
-            replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1)
+            replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1, new_total_state)
             bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")
         elif new_total_state <= STATE_GREEN_LOWER_BOUND:
             phrases = [
@@ -446,26 +440,39 @@ def check_total_state(user_id, char_id, name, gender, new_total_state,standart_p
             "Алло! Всё ок, но не на 100%.\nПроверь, как я там, пожалуйста.",
             "Мне вроде нормально. Но с тобой было бы лучше 😢"
             ]
-            replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1)
+            replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1, new_total_state)
             bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
         else:
-            replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 0)
+            replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 0, new_total_state)
 
 
 
-def replace_avatar_foto_in_db(user_id, gender, standart_photo_number, level):
-    
-    if standart_photo_number == NO_STANDART_FOTO:
-        return
-    
-    standart_foto_number_int = int(standart_photo_number)
+def replace_avatar_foto_in_db(user_id, gender, standart_photo_number, level, new_total_state):
+    try:
+        # Если выбрано нестандартное фото (-127), загружаем пользовательское фото с рамкой
+        if standart_photo_number == NO_STANDART_FOTO:
+            avatar_data = get_avatar_image_with_frame_color(user_id, gender, standart_photo_number, level, new_total_state)
+            update_or_insert_character_photo(user_id, avatar_data)
+        else:
+            # Если выбрано стандартное фото, формируем название файла и обновляем
+            standart_foto_number_int = int(standart_photo_number)
+            filename = f'men_{standart_foto_number_int}_{level}.png' if gender == 'male' else f'women_{standart_foto_number_int}_{level}.png'
+            full_path = os.path.join('pic', 'pic_avatar', filename)
 
-    filename = f'men_{standart_foto_number_int}_{level}.png' if gender == 'male' else f'women_{standart_foto_number_int}_{level}.png'
-    full_path = os.path.join('pic','pic_avatar', filename)   
+            # Чтение стандартного фото
+            with open(full_path, 'rb') as f:
+                new_photo_bytes = f.read()
+                update_or_insert_character_photo(user_id, new_photo_bytes)
 
-    with open(full_path, 'rb') as f:
-        new_photo_bytes = f.read()           
-        update_or_insert_character_photo(user_id, new_photo_bytes)
+            # Добавляем рамку к стандартному фото
+            framed_avatar_data = get_avatar_image_with_frame_color(user_id, gender, standart_photo_number, level, new_total_state)
+            update_or_insert_character_photo(user_id, framed_avatar_data)
+
+    except FileNotFoundError:
+        print(f'Ошибка: файл "{full_path}" не найден.')
+    except Exception as e:
+        print(f'Общая ошибка обновления аватара: {e}')
+
 
 def check_character_old (user_id, char_id, created_at, gender):
     # Проверка возраста персонажа
@@ -535,12 +542,14 @@ def check_money_need(user_id, gender, money_need):
 # Функция для запуска таймера
 def run_timer():
     while True:
-        current_time = datetime.now()       
+        current_time = datetime.now()               
         # Выбираем диапазон часов, в течение которого будем обновлять персонажей
         #if 9 <= current_time.hour <= 16 and current_time.minute == 0:
-        hourly_update_characters()
-        #time.sleep(60)  # Проверяем каждую минуту      
-        time.sleep(7200)  # Проверяем каждые два часа
+        if 9 <= current_time.hour <= 16:    
+            hourly_update_characters()
+            time.sleep(60)  # Проверяем каждую минуту      
+            #time.sleep(14100)  # Проверяем каждые четыре часа
+        else: time.sleep(60)    
 
 # Запускаем таймер в отдельном потоке
 timer_thread = Thread(target=run_timer)

@@ -28,6 +28,14 @@ def create_keyboard_for_new_user():
     ]
     return create_keyboard (buttons, False)
 
+def create_keyboard_for_info():
+
+    buttons = [
+        'Правила игры',
+        'Условия акции'        
+    ]
+    return create_keyboard (buttons, False)
+
 def create_keyboard_for_continue():
     buttons = [("Проведать любимку ❤️", "visit_avatar")]
     return create_inline_keyboard(buttons)
