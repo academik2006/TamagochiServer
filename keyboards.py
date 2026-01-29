@@ -32,7 +32,8 @@ def create_keyboard_for_info():
 
     buttons = [
         'Правила игры',
-        'Условия акции'        
+        'Условия акции',
+        'Сколько еще осталось'        
     ]
     return create_keyboard (buttons, False)
 

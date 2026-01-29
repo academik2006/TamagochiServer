@@ -56,6 +56,12 @@ def handle_promotion_conditions(message):
     bot.send_message(message.chat.id, CONDITIONS_TEXT, parse_mode="HTML")
     logger.info(f"Бот успешно отправил пользователю {message.chat.id} условия акции")    
 
+@bot.message_handler(func=lambda message: message.text == 'Сколько еще осталось')
+def handle_time_left(message):            
+    last_time_message = get_time_to_win(message)
+    bot.send_message(message.chat.id, last_time_message, parse_mode="HTML", reply_markup=create_keyboard_for_continue())
+    logger.info(f"Бот успешно отправил пользователю {message.chat.id} сколько еще осталось")
+
 def add_user_on_start(message):        
     user_id = message.from_user.id
     result = execute_query("SELECT * FROM users WHERE user_id=?", (user_id,))
@@ -70,7 +76,32 @@ def add_user_on_start(message):
         logger.info(f"В базу данных добавлен новый пользователь {user_id}")
     else:        
         check_character_and_send_status(user_id)    
-  
+
+def get_time_to_win(message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    character_data= get_current_avatar_param(user_id)
+    if character_data is None:
+        bot.send_message(chat_id,"Персонаж не найден")
+    else: 
+        char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, created_at_str  = character_data
+    
+    # Парсим timestamp из строки
+    created_at = datetime.strptime(created_at_str.split('.')[0], "%Y-%m-%d %H:%M:%S")
+    
+    # Текущее время
+    now = datetime.now()
+    
+    # Время необходимое для возможности выиграть (5 дней)
+    required_time = timedelta(days=5)
+    
+    # Остаточное время до достижения нужного периода
+    remaining_time = required_time - (now - created_at)
+    
+    hours_left = int(remaining_time.seconds / 3600)
+    minutes_left = int((remaining_time.seconds % 3600) / 60)
+    seconds_left = int(remaining_time.seconds % 60)
+    return f"Вашему персонажу осталось ждать {hours_left} часа(ов), {minutes_left} минуты(ы), {seconds_left} секунды(ы)"
 
 @bot.message_handler(func=lambda m: True)
 def handle_buttons(message):
@@ -293,8 +324,7 @@ def draw_progress_bars(image, hunger, fatigue, entertain, money_need):
 def send_character_image_with_progress(user_id, img_bytes, keyboard=None):        
     bio = io.BytesIO(img_bytes)
     bio.seek(0)       
-    sent_message = bot.send_photo(user_id, bio, reply_markup=keyboard)    
-    return sent_message.message_id               
+    bot.send_photo(user_id, bio, reply_markup=keyboard)        
 
 def create_character(user_id):    
     data = user_data.pop(user_id)
@@ -376,18 +406,28 @@ def add_frame_to_image(img_avatar, color):
     return img_avatar
    
 
-def check_character_and_send_status(user_id):
-    global last_message_id    
-    
+def check_character_and_send_status(user_id):    
+        
     char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, _ = get_current_avatar_param(user_id)
     keyboard = create_keyboard_for_chatacter_avatar(gender)
     img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state)
-    send_character_image_with_progress(user_id, img_bytes,keyboard)    
+    
+    if total_state == 100:        
+        send_character_image_with_progress(user_id, img_bytes,None)        
+        bot.send_message(user_id,"Все супер !!!")
+    else:
+        send_character_image_with_progress(user_id, img_bytes,keyboard)        
+   
 
 def hourly_update_characters():   
         
     result = execute_query("SELECT * FROM characters")
     all_chars = result
+        
+    # Проверяем, есть ли созданные персонажи
+    if not all_chars:
+        print("Активных персонажей нет")
+        return 
         
     for char_id, user_id, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number,created_at in all_chars:
         hunger -= 10

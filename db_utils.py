@@ -120,10 +120,16 @@ def update_character_parameter(user_id, param_name, value_change):
 
     return need_send_message, gender
 
-def get_current_avatar_param (user_id):
-    result = execute_query("SELECT * FROM characters WHERE user_id=?", (user_id,))       
-    character_data = result[0]    
-    return character_data
+def get_current_avatar_param(user_id):
+    """Получает параметры персонажа по user_id"""
+    result = execute_query("SELECT * FROM characters WHERE user_id=?", (user_id,))
+    
+    # Проверяем, есть ли данные
+    if len(result) > 0:
+        character_data = result[0]
+        return character_data
+    else:
+        return None
 
 def delete_character_from_db(char_id):
     """
