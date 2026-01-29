@@ -1,4 +1,5 @@
 import os
+import re
 from telebot import types
 import telebot
 import asyncio
@@ -112,7 +113,7 @@ def handle_buttons(message):
     if text in ["мужской", "женский"]:
         gender = "male" if text == "мужской" else "female"
         user_data[message.chat.id] = {"gender": gender}        
-        bot.send_message(message.chat.id, "Теперь выбери имя своего персонажа (не более 30 символов, буквы и цифры).")
+        bot.send_message(message.chat.id, "Теперь выбери имя своего персонажа (не более 30 символов, буквы и цифры, смайлики).")
         bot.register_next_step_handler(message, process_character_name)
     elif text.startswith("создать персонажа"):        
         bot.send_message(user_id, "Выбери пол своего персонажа", reply_markup=create_keyboard_for_choose_gender())
@@ -180,7 +181,7 @@ def ugrade_character_parameter_and_show_new_avatar (user_id, param_name, value_c
 def process_character_name(message):
     name = message.text.strip()
     if not is_valid_name(name):
-        bot.reply_to(message, "Имя некорректно. Повторите попытку.")
+        bot.reply_to(message, "Имя некорректно. Повторите попытку.")        
         return
     
     user_data[message.chat.id]["name"] = name
