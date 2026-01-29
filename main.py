@@ -407,9 +407,15 @@ def add_frame_to_image(img_avatar, color):
     return img_avatar
    
 
-def check_character_and_send_status(user_id):    
-        
-    char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, _ = get_current_avatar_param(user_id)
+def check_character_and_send_status(user_id): 
+
+    result = get_current_avatar_param(user_id)
+    if result is None:
+        print("Не найдет персонаж")
+        return
+    else: 
+        char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, _ = result
+
     keyboard = create_keyboard_for_chatacter_avatar(gender)
     img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state)
     
