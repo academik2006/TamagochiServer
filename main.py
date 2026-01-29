@@ -21,6 +21,7 @@ STATE_RED_LOWER_BOUND = 30
 STATE_YELLOW_UPPER_BOUND = 50
 STATE_GREEN_LOWER_BOUND = 80
 NO_STANDART_FOTO = -127
+DAY_TO_WIN = 2
 
 bot = telebot.TeleBot(API_TOKEN)
 bot.delete_webhook()
@@ -92,8 +93,8 @@ def get_time_to_win(message):
     # Текущее время
     now = datetime.now()
     
-    # Время необходимое для возможности выиграть (5 дней)
-    required_time = timedelta(days=5)
+    # Время необходимое для возможности выиграть
+    required_time = timedelta(days=DAY_TO_WIN)
     
     # Остаточное время до достижения нужного периода
     remaining_time = required_time - (now - created_at)
@@ -516,7 +517,7 @@ def replace_avatar_foto_in_db(user_id, gender, standart_photo_number, level, new
 def check_character_old (user_id, char_id, created_at, gender):
     # Проверка возраста персонажа
         now = datetime.now()
-        five_days_ago = now - timedelta(days=5)
+        five_days_ago = now - timedelta(days=DAY_TO_WIN)
         created_dt = datetime.strptime(created_at.split('.')[0], "%Y-%m-%d %H:%M:%S")
         if created_dt < five_days_ago:
             win(user_id, char_id,gender) 
@@ -578,17 +579,26 @@ def check_money_need(user_id, gender, money_need):
         bot.send_message(user_id, message, parse_mode="HTML")
             
 
-# Функция для запуска таймера
 def run_timer():
     while True:
-        current_time = datetime.now()               
-        # Выбираем диапазон часов, в течение которого будем обновлять персонажей
-        #if 9 <= current_time.hour <= 16 and current_time.minute == 0:
-        if 9 <= current_time.hour <= 16:    
+        current_time = datetime.now()
+        hour = current_time.hour
+        
+        # Определим ближайшую следующую точку старта в диапазоне 9-16 часов
+        next_start_hour = ((hour + 1) // 2) * 2  # Округление вверх до ближайшего чётного часа
+        if next_start_hour >= 18 or next_start_hour < 9:
+            next_start_hour = 9  # Следующая точка старта в рабочий период
+        
+        wait_until_next_start = (
+            datetime(current_time.year, current_time.month, current_time.day, next_start_hour)
+            - current_time
+        ).total_seconds()
+        
+        if wait_until_next_start > 0:
+            time.sleep(wait_until_next_start)
+        else:
             hourly_update_characters()
-            time.sleep(60)  # Проверяем каждую минуту      
-            #time.sleep(14100)  # Проверяем каждые четыре часа
-        else: time.sleep(60)    
+            time.sleep(7200)  # Ждем ровно 2 часа (7200 секунд)
 
 # Запускаем таймер в отдельном потоке
 timer_thread = Thread(target=run_timer)
