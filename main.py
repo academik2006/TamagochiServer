@@ -12,7 +12,6 @@ import logging
 import random
 from db_utils import *
 from messages import *
-from file_work_utils import *
 from keyboards import *
 from PIL import Image, ImageDraw, ImageFont
 import io
@@ -22,7 +21,8 @@ STATE_RED_LOWER_BOUND = 30
 STATE_YELLOW_UPPER_BOUND = 50
 STATE_GREEN_LOWER_BOUND = 80
 NO_STANDART_FOTO = -127
-DAY_TO_WIN = 2
+HOURS_TO_WIN = 24
+HOURS_SHIFT_SERVER = 7
 
 bot = telebot.TeleBot(API_TOKEN)
 bot.delete_webhook()
@@ -35,12 +35,7 @@ user_data = {}
 
 async def main():    
     logger.info("Бот запущен")
-    create_db()     
-    try:
-        set_global_promo_map (await readFileToMap())                    
-    except Exception as e:
-        print(f"Ошибка: {e}")
-
+    create_db()         
 
 @bot.message_handler(commands=['start']) #обрабатываем команду старт
 def start_fun(message):
@@ -53,16 +48,11 @@ def handle_game_rules(message):
     bot.send_message(message.chat.id, RULES_TEXT, parse_mode="HTML")
     logger.info(f"Бот успешно отправил пользователю {message.chat.id} правила игры")
 
-@bot.message_handler(func=lambda message: message.text == 'Условия акции')
-def handle_promotion_conditions(message):
-    bot.send_message(message.chat.id, CONDITIONS_TEXT, parse_mode="HTML")
-    logger.info(f"Бот успешно отправил пользователю {message.chat.id} условия акции")    
-
-@bot.message_handler(func=lambda message: message.text == 'Сколько еще осталось')
+@bot.message_handler(func=lambda message: message.text == 'Сколько до финиша')
 def handle_time_left(message):            
     last_time_message = get_time_to_win(message)
     bot.send_message(message.chat.id, last_time_message, parse_mode="HTML", reply_markup=create_keyboard_for_continue())
-    logger.info(f"Бот успешно отправил пользователю {message.chat.id} сколько еще осталось")
+    logger.info(f"Бот успешно отправил пользователю {message.chat.id} сколько до финиша")
 
 def add_user_on_start(message):        
     user_id = message.from_user.id
@@ -78,32 +68,6 @@ def add_user_on_start(message):
         logger.info(f"В базу данных добавлен новый пользователь {user_id}")
     else:        
         check_character_and_send_status(user_id)    
-
-def get_time_to_win(message):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    character_data= get_current_avatar_param(user_id)
-    if character_data is None:
-        bot.send_message(chat_id,"Персонаж не найден")
-    else: 
-        char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, created_at_str  = character_data
-    
-    # Парсим timestamp из строки
-    created_at = datetime.strptime(created_at_str.split('.')[0], "%Y-%m-%d %H:%M:%S")
-    
-    # Текущее время
-    now = datetime.now()
-    
-    # Время необходимое для возможности выиграть
-    required_time = timedelta(days=DAY_TO_WIN)
-    
-    # Остаточное время до достижения нужного периода
-    remaining_time = required_time - (now - created_at)
-    
-    hours_left = int(remaining_time.seconds / 3600)
-    minutes_left = int((remaining_time.seconds % 3600) / 60)
-    seconds_left = int(remaining_time.seconds % 60)
-    return f"Вашему персонажу осталось ждать {hours_left} часа(ов), {minutes_left} минуты(ы), {seconds_left} секунды(ы)"
 
 @bot.message_handler(func=lambda m: True)
 def handle_buttons(message):
@@ -412,7 +376,8 @@ def check_character_and_send_status(user_id):
 
     result = get_current_avatar_param(user_id)
     if result is None:
-        print("Не найдет персонаж")
+        print("Не найден персонаж")
+        bot.send_message(user_id, "Не найден персонаж",reply_markup=create_keyboard_for_new_user())       
         return
     else: 
         char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, _ = result
@@ -421,8 +386,9 @@ def check_character_and_send_status(user_id):
     img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state)
     
     if total_state == 100:        
-        send_character_image_with_progress(user_id, img_bytes,None)        
-        bot.send_message(user_id,"Все супер !!!")
+        send_character_image_with_progress(user_id, img_bytes,None)  
+        text = "Сейчас всё хорошо – редкий, но приятный момент" if gender == "male" else "Я довольна, сыта, спокойна и немножко счастлива"        
+        bot.send_message(user_id,text)
     else:
         send_character_image_with_progress(user_id, img_bytes,keyboard)        
    
@@ -452,7 +418,12 @@ def hourly_update_characters():
         check_money_need(user_id,gender,hunger)
 
         check_total_state(user_id,char_id,name,gender,max(new_total_state,0),standart_photo_number)        
-        check_character_old(user_id, char_id, created_at,gender)
+        hours_left = check_character_old(user_id, char_id, created_at,gender)
+        logger.info(f"hours_left = {hours_left}")
+
+        # Если персонаж старше требуемого времени, выдаём награду
+        if hours_left < 1:
+            win(user_id, char_id, gender)                    
         
 
 def calculate_total_state(hunger, fatigue, entertain, money_need):
@@ -521,22 +492,44 @@ def replace_avatar_foto_in_db(user_id, gender, standart_photo_number, level, new
         print(f'Общая ошибка обновления аватара: {e}')
 
 
-def check_character_old (user_id, char_id, created_at, gender):
-    # Проверка возраста персонажа
-        now = datetime.now()
-        five_days_ago = now - timedelta(days=DAY_TO_WIN)
-        created_dt = datetime.strptime(created_at.split('.')[0], "%Y-%m-%d %H:%M:%S")
-        if created_dt < five_days_ago:
-            win(user_id, char_id,gender) 
+def check_character_old(user_id, char_id, created_at_str, gender):
+    # Парсим timestamp из строки
+        created_at = datetime.strptime(created_at_str.split('.')[0], "%Y-%m-%d %H:%M:%S")
+        logger.info(f"Время после парсинга {created_at}")
+
+        # Текущее время минус HOURS_SHIFT_SERVER часов (для компенсации разницы)
+        now_adjusted = datetime.now() - timedelta(hours=HOURS_SHIFT_SERVER)
+        logger.info(f"Текущее время (скорректированное) {now_adjusted}")
+
+        # Время необходимое для возможности выиграть (переводим дни в часы)
+        required_time = timedelta(hours=HOURS_TO_WIN)
+        
+        # Остаточное время до достижения нужного периода
+        remaining_time = required_time - (now_adjusted - created_at)
+        hours_left = max(int(remaining_time.total_seconds() // 3600), 0)
+        return hours_left    
+
+def get_time_to_win(message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    character_data = get_current_avatar_param(user_id)
+    if character_data is None:
+        bot.send_message(chat_id, "Персонаж не найден")
+    else:
+        char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, created_at_str = character_data
+        hours_left = check_character_old(user_id, char_id, created_at_str, gender)      
+        logger.info(f"До финиша осталось {hours_left}")        
+        return f"До финиша осталось {hours_left} часа(ов)"
+        
 
 def win(user_id, char_id, gender):
-    delete_character_from_db(char_id)
-    element=getPromo()
-    сongratulation_text = CONGRATULATION_TEXT.format(element)           
-
+    delete_character_from_db(char_id)    
+    # Случайно выбираем одну из поздравительных записей
+    сongratulation_text = random.choice(CONGRATS_OPTIONS)
     picture_path = "pic/women_win.jpg" if gender == "male" else "pic/men_win.jpg"
     with open(picture_path, 'rb') as photo:
-        bot.send_photo(user_id, photo, caption=сongratulation_text, reply_markup=create_keyboard_for_new_user(),parse_mode="HTML")           
+        bot.send_photo(user_id, photo)           
+    bot.send_message(user_id,сongratulation_text,reply_markup=create_keyboard_for_new_user(), parse_mode="HTML")    
     
 
 def lose(user_id, char_id, gender):
@@ -591,26 +584,22 @@ def run_timer():
         current_time = datetime.now()
         hour = current_time.hour
         
-        # Определим ближайшую следующую точку старта в диапазоне 9-16 часов
-        next_start_hour = ((hour + 1) // 2) * 2  # Округление вверх до ближайшего чётного часа
-        if next_start_hour >= 18 or next_start_hour < 9:
-            next_start_hour = 9  # Следующая точка старта в рабочий период
-        
-        wait_until_next_start = (
-            datetime(current_time.year, current_time.month, current_time.day, next_start_hour)
-            - current_time
-        ).total_seconds()
-        
-        if wait_until_next_start > 0:
-            time.sleep(wait_until_next_start)
-        else:
+        # Работаем только с 9:00 до 22:00
+        if 9 <= hour < 22:
             hourly_update_characters()
-            time.sleep(7200)  # Ждем ровно 2 часа (7200 секунд)
+            time.sleep(60)  # Ждем ровно 2 часа (7200 секунд)
+        else:
+            # До 9:00 утра следующего дня считаем время сна
+            tomorrow_nine_am = datetime(current_time.year, current_time.month, current_time.day + 1, 9, 0, 0)
+            delta = tomorrow_nine_am - current_time
+            sleep_seconds = delta.total_seconds()
+            print(f"Следующее обновление в 9:00 утра. Дожидаемся {sleep_seconds:.0f} секунд.")
+            time.sleep(sleep_seconds)       
+        
 
 # Запускаем таймер в отдельном потоке
 timer_thread = Thread(target=run_timer)
-timer_thread.start()
-  
+timer_thread.start()  
            
 
 if __name__ == "__main__":

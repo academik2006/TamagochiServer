@@ -22,8 +22,7 @@ def create_keyboard_for_choose_gender ():
 def create_keyboard_for_new_user():
 
     buttons = [
-        'Правила игры',
-        'Условия акции',
+        'Правила игры',        
         'Создать персонажа',
     ]
     return create_keyboard (buttons, False)
@@ -31,9 +30,8 @@ def create_keyboard_for_new_user():
 def create_keyboard_for_info():
 
     buttons = [
-        'Правила игры',
-        'Условия акции',
-        'Сколько еще осталось'        
+        'Правила игры',        
+        'Сколько до финиша'        
     ]
     return create_keyboard (buttons, False)
 
