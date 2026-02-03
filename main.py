@@ -22,7 +22,7 @@ STATE_YELLOW_UPPER_BOUND = 50
 STATE_GREEN_LOWER_BOUND = 80
 NO_STANDART_FOTO = -127
 HOURS_TO_WIN = 24
-HOURS_SHIFT_SERVER = 7
+HOURS_SHIFT_SERVER = 3
 
 bot = telebot.TeleBot(API_TOKEN)
 bot.delete_webhook()
@@ -583,17 +583,18 @@ def run_timer():
     while True:
         current_time = datetime.now()
         hour = current_time.hour
+        logger.info(f"Время в таймере {current_time}")
         
         # Работаем только с 9:00 до 22:00
         if 9 <= hour < 22:
             hourly_update_characters()
-            time.sleep(60)  # Ждем ровно 2 часа (7200 секунд)
+            time.sleep(7200)  # Ждем ровно 2 часа (7200 секунд)
         else:
             # До 9:00 утра следующего дня считаем время сна
             tomorrow_nine_am = datetime(current_time.year, current_time.month, current_time.day + 1, 9, 0, 0)
             delta = tomorrow_nine_am - current_time
             sleep_seconds = delta.total_seconds()
-            print(f"Следующее обновление в 9:00 утра. Дожидаемся {sleep_seconds:.0f} секунд.")
+            logger.info(f"Следующее обновление в 9:00 утра. Дожидаемся {sleep_seconds:.0f} секунд.")
             time.sleep(sleep_seconds)       
         
 
