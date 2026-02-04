@@ -77,7 +77,7 @@ def handle_buttons(message):
     if text in ["мужской", "женский"]:
         gender = "male" if text == "мужской" else "female"
         user_data[message.chat.id] = {"gender": gender}        
-        bot.send_message(message.chat.id, "Теперь выбери имя своего персонажа (не более 30 символов, буквы и цифры)")
+        bot.send_message(message.chat.id, "Теперь выбери имя своего персонажа (не более 12 символов, буквы и цифры)")
         bot.register_next_step_handler(message, process_character_name)
     elif text.startswith("создать персонажа"):        
         bot.send_message(user_id, "Выбери пол своего персонажа", reply_markup=create_keyboard_for_choose_gender())
@@ -154,7 +154,7 @@ def process_character_name(message):
 # Функция для проверки правильности имени
 def is_valid_name(name):
     """Проверяет длину имени и наличие спецсимволов."""
-    return len(name.strip()) <= 30 and all(char.isalnum() or char.isspace() for char in name) 
+    return len(name.strip()) <= 12 and all(char.isalnum() or char.isspace() for char in name) 
 
 def resize_proportionally(img, max_width=300, max_height=446):
     """Масштабирует изображение, сохраняя пропорции, и ограничивая максимальные размеры."""
@@ -320,10 +320,10 @@ def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain,
     background_img.paste(img_avatar, (x_avatar, y_avatar))
 
     # Рисуем имя персонажа над аватаром
-    font_size = 44
+    font_size = 54
     font = ImageFont.truetype("arial_bold.ttf", size=font_size)      
     draw = ImageDraw.Draw(background_img)
-    text_position = (x_avatar+100, y_avatar - 50)  # Позиция текста (x, y)
+    text_position = (x_avatar - 70, y_avatar - 70)  # Позиция текста (x, y)
     draw.text(text_position, name, font=font, fill="#000000")
     
     # Применяем функцию рисования шкал
