@@ -77,7 +77,7 @@ def handle_buttons(message):
     if text in ["мужской", "женский"]:
         gender = "male" if text == "мужской" else "female"
         user_data[message.chat.id] = {"gender": gender}        
-        bot.send_message(message.chat.id, "Теперь выбери имя своего персонажа (не более 30 символов, буквы и цифры, смайлики).")
+        bot.send_message(message.chat.id, "Теперь выбери имя своего персонажа (не более 30 символов, буквы и цифры)")
         bot.register_next_step_handler(message, process_character_name)
     elif text.startswith("создать персонажа"):        
         bot.send_message(user_id, "Выбери пол своего персонажа", reply_markup=create_keyboard_for_choose_gender())
