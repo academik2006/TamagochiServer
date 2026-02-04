@@ -4,8 +4,8 @@ from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 def create_keyboard_for_choose_avatar_photo ():
 
-    keyboard = types.InlineKeyboardMarkup(row_width=2)
-    load_button = types.InlineKeyboardButton(text="Загрузить своё", callback_data='load_own')
+    keyboard = types.InlineKeyboardMarkup(row_width=1)
+    load_button = types.InlineKeyboardButton(text="Загрузить фото своей половинки", callback_data='load_own')
     select_standard_button = types.InlineKeyboardButton(text="Выбрать стандартное", callback_data='select_standard')
     keyboard.add(load_button, select_standard_button)
     

@@ -254,7 +254,7 @@ def draw_progress_bars(image, hunger, fatigue, entertain, money_need):
     """        
     bar_height = 50
     padding = 70
-    margin_top = image.height - ((bar_height + padding) * 4) - 300  # Отступ 50 px
+    margin_top = image.height - ((bar_height + padding) * 4) - 280
             
     # Создание копии изображения для рисования
     draw = ImageDraw.Draw(image)
@@ -314,17 +314,25 @@ def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain,
     background_path = os.path.join('pic', 'back_big.png')    
     background_img = Image.open(background_path)
     x_avatar = background_img.width // 2 - img_avatar.width // 2 
-    y_avatar = 80
+    y_avatar = 100
     
     # Размещаем уменьшенное изображение на фоне
     background_img.paste(img_avatar, (x_avatar, y_avatar))
 
     # Рисуем имя персонажа над аватаром
     font_size = 54
-    font = ImageFont.truetype("arial_bold.ttf", size=font_size)      
+    font = ImageFont.truetype("commissioner_bold.ttf", size=font_size)
     draw = ImageDraw.Draw(background_img)
-    text_position = (x_avatar - 70, y_avatar - 70)  # Позиция текста (x, y)
-    draw.text(text_position, name, font=font, fill="#000000")
+
+    # Получаем размер текста
+    text_w, _ = font.getbbox(name)[2:]  # Использование getbbox для современных версий Pillow
+
+    # Центрируем текст по ширине
+    text_position = (
+        (background_img.width - text_w) // 2,  # Центрирование по горизонтали
+        y_avatar - 90                         # Оставляем прежнюю вертикальную позицию
+    )
+    draw.text(text_position, name, font=font, fill="#C11719")
     
     # Применяем функцию рисования шкал
     final_img_with_progress_bars = draw_progress_bars(background_img, hunger, fatigue, entertain, money_need)
