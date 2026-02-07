@@ -601,7 +601,7 @@ def run_timer():
         # Работаем только с 9:00 до 22:00
         if 9 <= hour < 22:
             hourly_update_characters()            
-            time.sleep(7200)  # Ждем ровно 2 часа (7200 секунд)
+            time.sleep(3600)  # Ждем ровно 1 час (3600 секунд)
         else:
             time.sleep(60)  
 
