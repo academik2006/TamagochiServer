@@ -17,9 +17,9 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 
 STATE_LOSE_LOWER_BOUND = 20
-STATE_RED_LOWER_BOUND = 30
+STATE_RED_LOWER_BOUND = 35
 STATE_YELLOW_UPPER_BOUND = 50
-STATE_GREEN_LOWER_BOUND = 80
+STATE_GREEN_LOWER_BOUND = 85
 NO_STANDART_FOTO = -127
 HOURS_TO_WIN = 48
 HOURS_SHIFT_SERVER = 3
@@ -222,7 +222,7 @@ def select_standard_photo(chat_id):
 
     # Формируем inline-клавиатуру с номерами картинок
     keyboard = types.InlineKeyboardMarkup().add(*buttons)
-    bot.send_message(chat_id, "Выберите одну из фотографий:", reply_markup=keyboard)
+    bot.send_message(chat_id, "Выбери одну из фотографий:", reply_markup=keyboard)
 
 def select_standard_photo_handler(call):
     selected_number = int(call.data.split(':')[1]) - 1  # Преобразование номера в индекс массива
@@ -302,7 +302,7 @@ def create_character(user_id):
     add_character_to_database(user_id, name, gender, photo_blob,standart_photo_number)                
     replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 0, 100)
     
-    bot.send_message(user_id, text="Ваш персонаж успешно создан!", reply_markup = create_keyboard_for_info())
+    bot.send_message(user_id, text="Твой персонаж успешно создан!", reply_markup = create_keyboard_for_info())
     check_character_and_send_status(user_id)  
 
 def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state):
@@ -455,8 +455,8 @@ def check_total_state(user_id, char_id, name, gender, new_total_state,standart_p
         elif new_total_state <= STATE_YELLOW_UPPER_BOUND:
             phrases = [
             "Я еще держусь, но это уже не мой лучший день.",
-            "Я не паникую.Но повода для радости тоже мало.",
-            "Так… у нас тут уже не идеально.Я начинаю чувствовать себя забытым."
+            "Я не паникую. Но повода для радости тоже мало.",
+            "Так… у нас тут уже не идеально. Я начинаю чувствовать себя одиноко."
             ]
             replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1, new_total_state)
             bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")
@@ -525,10 +525,17 @@ def get_time_to_win(message):
         bot.send_message(chat_id, "Персонаж не найден")
     else:
         char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, created_at_str = character_data
-        hours_left = check_character_old(user_id, char_id, created_at_str, gender)      
-        logger.info(f"До финиша осталось {hours_left}")        
-        return f"До финиша осталось {hours_left} часа(ов)"
-        
+        hours_left = check_character_old(user_id, char_id, created_at_str, gender)
+                      
+        logger.info(f"До финиша осталось {hours_left}")
+
+        # Если персонаж старше требуемого времени, выдаём награду
+        if hours_left < 1:
+            win(user_id, char_id, gender)
+            return "Победа"
+        else:
+            return f"До финиша осталось {hours_left} часа(ов)"
+
 
 def win(user_id, char_id, gender):
     delete_character_from_db(char_id)    
@@ -593,7 +600,7 @@ def run_timer():
         hour = current_time.hour        
         # Работаем только с 9:00 до 22:00
         if 9 <= hour < 22:
-            hourly_update_characters()
+            hourly_update_characters()            
             time.sleep(7200)  # Ждем ровно 2 часа (7200 секунд)
         else:
             time.sleep(60)  
