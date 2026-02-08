@@ -389,8 +389,10 @@ def check_character_and_send_status(user_id):
         return
     else: 
         char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, _ = result
+        check_total_state(user_id,char_id,name,gender,max(total_state,0),standart_photo_number)        
 
     keyboard = create_keyboard_for_chatacter_avatar(gender)
+    
     img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state)
     
     if total_state == 100:        
