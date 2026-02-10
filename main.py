@@ -87,16 +87,16 @@ def handle_buttons(message):
 @bot.callback_query_handler(func=lambda call: True)
 def handle_button_click(call):
     chat_id = call.message.chat.id
-    callback_data = call.data
-    
+    callback_data = call.data    
+        
     # Обрабатываем каждое действие отдельно
-    if callback_data == 'action_hunger':
+    if callback_data == 'action_hunger':        
         ugrade_character_parameter_and_show_new_avatar(chat_id, 'hunger', +40)                
-    elif callback_data == 'action_fatigue':
+    elif callback_data == 'action_fatigue':        
         ugrade_character_parameter_and_show_new_avatar(chat_id, 'fatigue', +20)
-    elif callback_data == 'action_entertainment':
+    elif callback_data == 'action_entertainment':        
         ugrade_character_parameter_and_show_new_avatar(chat_id, 'entertainment', +20)
-    elif callback_data == 'action_kiss':
+    elif callback_data == 'action_kiss':        
         ugrade_character_parameter_and_show_new_avatar(chat_id, 'money_needs', +20)                
     elif callback_data == 'load_own':
         chat_id = call.message.chat.id
@@ -388,19 +388,16 @@ def check_character_and_send_status(user_id):
         bot.send_message(user_id, "Не найден персонаж",reply_markup=create_keyboard_for_new_user())       
         return
     else: 
-        char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, _ = result
-        check_total_state(user_id,char_id,name,gender,max(total_state,0),standart_photo_number)        
-
-    keyboard = create_keyboard_for_chatacter_avatar(gender)
+        char_id, _, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, _ = result        
+        keyboard = create_keyboard_for_chatacter_avatar(gender)    
+        img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state)
     
-    img_bytes = generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain, money_need, total_state)
-    
-    if total_state == 100:        
-        send_character_image_with_progress(user_id, img_bytes,None)  
-        text = "Сейчас всё хорошо – редкий, но приятный момент" if gender == "male" else "Я довольна, сыта, спокойна и немножко счастлива"        
-        bot.send_message(user_id,text)
-    else:
-        send_character_image_with_progress(user_id, img_bytes,keyboard)        
+        if total_state == 100:        
+            send_character_image_with_progress(user_id, img_bytes,None)  
+            text = "Сейчас всё хорошо – редкий, но приятный момент" if gender == "male" else "Я довольна, сыта, спокойна и немножко счастлива"        
+            bot.send_message(user_id,text)
+        else:
+            send_character_image_with_progress(user_id, img_bytes,keyboard)        
    
 
 def hourly_update_characters():   
@@ -603,7 +600,7 @@ def run_timer():
         # Работаем только с 9:00 до 22:00
         if 9 <= hour < 22:
             hourly_update_characters()            
-            time.sleep(3600)  # Ждем ровно 1 час (3600 секунд)
+            time.sleep(3600)  # Ждем ровно 1 час (3600 секунд)            
         else:
             time.sleep(60)  
 
