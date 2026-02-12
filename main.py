@@ -643,7 +643,7 @@ def run_timer():
         #Работаем только с 7:00 до 22:00
         if 7 <= hour < 22:
             logger.info(f"Время в основном таймере {current_time}")            
-            #hourly_update_characters()            
+            hourly_update_characters()            
             time.sleep(3600)  # Ждем ровно 1 час (3600 секунд)            
         else:
             logger.info(f"Время в маленьком таймере  {current_time}")            
