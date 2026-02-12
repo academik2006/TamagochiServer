@@ -395,7 +395,7 @@ def check_character_and_send_status(user_id):
         if total_state == 100:        
             send_character_image_with_progress(user_id, img_bytes,None)  
             text = "Сейчас всё хорошо – редкий, но приятный момент" if gender == "male" else "Я довольна, сыта, спокойна и немножко счастлива"        
-            bot.send_message(user_id,text)
+            bot.send_message(user_id,text,reply_markup=create_keyboard_for_info(), parse_mode="HTML") 
         else:
             send_character_image_with_progress(user_id, img_bytes,keyboard)        
    
@@ -595,13 +595,16 @@ def run_timer():
         current_time = datetime.now()
         hour = current_time.hour                
         # Работаем только с 9:00 до 22:00
-        if 5 <= hour < 23:
-            logger.info(f"Время в основном таймере {current_time}")            
-            hourly_update_characters()            
-            time.sleep(3600)  # Ждем ровно 1 час (3600 секунд)            
-        else:
-            logger.info(f"Время в маленьком таймере  {current_time}")            
-            time.sleep(60)        
+        #if 5 <= hour < 23:
+        #    logger.info(f"Время в основном таймере {current_time}")            
+        #    hourly_update_characters()            
+        #    time.sleep(3600)  # Ждем ровно 1 час (3600 секунд)            
+        #else:
+        #    logger.info(f"Время в маленьком таймере  {current_time}")            
+        #    time.sleep(60)        
+        logger.info(f"Время в основном таймере {current_time}, часы = {hour}")            
+        hourly_update_characters()            
+        time.sleep(3600)  # Ждем ровно 1 час (3600 секунд)            
 
 # Запускаем таймер в отдельном потоке
 timer_thread = Thread(target=run_timer)
