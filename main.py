@@ -452,7 +452,11 @@ def check_total_state(user_id, char_id, name, gender, new_total_state,standart_p
             "Мы почти на грани.Я серьезно."            
             ]
             replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 2, new_total_state)
-            bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")            
+            try:
+                bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")
+            except Exception as e:
+                logger.warning(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+            
         elif new_total_state <= STATE_YELLOW_UPPER_BOUND:
             phrases = [
             "Я еще держусь, но это уже не мой лучший день.",
@@ -460,7 +464,10 @@ def check_total_state(user_id, char_id, name, gender, new_total_state,standart_p
             "Так… у нас тут уже не идеально. Я начинаю чувствовать себя одиноко."
             ]
             replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1, new_total_state)
-            bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")
+            try:
+                bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")
+            except Exception as e:
+                logger.warning(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
         elif new_total_state <= STATE_GREEN_LOWER_BOUND:
             phrases = [
             "Хмм… кажется, у нас тут легкий эмоциональный сквозняк.\nНичего критичного, но лучше заглянуть.",
@@ -468,7 +475,10 @@ def check_total_state(user_id, char_id, name, gender, new_total_state,standart_p
             "Мне вроде нормально. Но с тобой было бы лучше 😢"
             ]
             replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1, new_total_state)
-            bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML") 
+            try:
+                bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")
+            except Exception as e:
+                logger.warning(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
         else:
             replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 0, new_total_state)
 
@@ -537,21 +547,41 @@ def get_time_to_win(message):
 
 def win(user_id, char_id, gender):
     delete_character_from_db(char_id)    
-    # Случайно выбираем одну из поздравительных записей
-    сongratulation_text = random.choice(CONGRATS_OPTIONS)
-    picture_path = "pic/women_win.jpg" if gender == "male" else "pic/men_win.jpg"
-    with open(picture_path, 'rb') as photo:
-        bot.send_photo(user_id, photo)           
-    bot.send_message(user_id,сongratulation_text,reply_markup=create_keyboard_for_new_user(), parse_mode="HTML")    
+    congratulation_text = random.choice(CONGRATS_OPTIONS)
+    picture_path = "pic/men_win.jpg" if gender == "male" else "pic/women_win.jpg"
+
+    try:
+        # Попытка отправки фотографии
+        with open(picture_path, 'rb') as photo:
+            bot.send_photo(user_id, photo)
+    except Exception as e:
+        logger.warning(f"Ошибка при отправке фотографии победителю пользователю {user_id}: {e}")
+
+    try:
+        # Попытка отправки текста поздравления
+        bot.send_message(user_id, congratulation_text, reply_markup=create_keyboard_for_new_user(), parse_mode="HTML")
+    except Exception as e:
+        logger.warning(f"Ошибка при отправке поздравления пользователю {user_id}: {e}")  
     
 
 def lose(user_id, char_id, gender):
-    delete_character_from_db(char_id)
-    fail_text = FAIL_TEXT_MAN if gender == "male" else FAIL_TEXT_WOMEN            
-    picture_path = "pic/women_lose.jpg" if gender == "male" else "pic/men_lose.jpg"
-                # Отправляем картинку пользователю
-    with open(picture_path, 'rb') as photo:
-        bot.send_photo(user_id, photo, caption=fail_text, reply_markup=create_keyboard_for_new_user(),parse_mode="HTML")           
+      delete_character_from_db(char_id)
+      fail_text = FAIL_TEXT_MAN if gender == "male" else FAIL_TEXT_WOMEN              
+      picture_path = "pic/women_lose.jpg" if gender == "female" else "pic/men_lose.jpg"
+
+      try:
+          # Открываем фотографию и пытаемся отправить пользователю
+          with open(picture_path, 'rb') as photo:
+              bot.send_photo(
+                  user_id,
+                  photo,
+                  caption=fail_text,
+                  reply_markup=create_keyboard_for_new_user(),
+                  parse_mode="HTML"
+              )
+      except Exception as e:
+          # Логируем событие, если отправка не удалась
+          logger.warning(f"Ошибка при отправке фотографии проигрыша пользователю {user_id}: {e}")          
 
 
 def check_hunger(user_id, gender, hunger):
@@ -561,8 +591,12 @@ def check_hunger(user_id, gender, hunger):
         if gender == 'female':
             message = "🍣 Я не ела уже целую вечность!\nРоллы бы сейчас спасли эту историю любви."
         elif gender == 'male':
-            message = "🍜 Я думаю о еде больше, чем о смысле жизни.\nНам срочно нужен вок."
-        bot.send_message(user_id, message, parse_mode="HTML")
+            message = "🍜 Я думаю о еде больше, чем о смысле жизни.\nНам срочно нужен вок."        
+        try:        
+          bot.send_message(user_id, message, parse_mode="HTML")
+        except Exception as e:
+          logger.warning(f"Попытка отправить сообщение пользователю {user_id} завершилась неудачей: {e}")    
+        
 
 def check_fatigue(user_id, gender, fatigue):
     if fatigue < 60:
@@ -571,7 +605,10 @@ def check_fatigue(user_id, gender, fatigue):
             message = "🛀 Я устала.\nОчень.\nСПА. СРОЧНО."
         elif gender == 'male':
             message = "📺 Я морально на диване...\nА физически – еще нет."
-        bot.send_message(user_id, message, parse_mode="HTML")
+        try:        
+          bot.send_message(user_id, message, parse_mode="HTML")
+        except Exception as e:
+          logger.warning(f"Попытка отправить сообщение пользователю {user_id} завершилась неудачей: {e}")    
 
 def check_entertain(user_id, gender, entertain):
     if entertain <= 40:
@@ -580,7 +617,10 @@ def check_entertain(user_id, gender, entertain):
             message = "💸 Мне срочно нужно немного денег на развлечения…\nЯ держусь, но карта – нет."
         elif gender == 'male':
             message = "🏖️ Мне нужно к пацанам в баню.\nЭто не побег, это… профилактика усталости."
-        bot.send_message(user_id, message, parse_mode="HTML")
+        try:        
+          bot.send_message(user_id, message, parse_mode="HTML")
+        except Exception as e:
+          logger.warning(f"Попытка отправить сообщение пользователю {user_id} завершилась неудачей: {e}")    
 
 def check_money_need(user_id, gender, money_need):
     if money_need < 55:
@@ -589,7 +629,10 @@ def check_money_need(user_id, gender, money_need):
             message = "😘 Алло, а где мои обнимашки?\nИсправь."
         elif gender == 'male':
             message = "Алло, а где мои обнимашки?\nИсправь."
-        bot.send_message(user_id, message, parse_mode="HTML")
+        try:        
+          bot.send_message(user_id, message, parse_mode="HTML")
+        except Exception as e:
+          logger.warning(f"Попытка отправить сообщение пользователю {user_id} завершилась неудачей: {e}")    
             
 
 def run_timer():
