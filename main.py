@@ -404,6 +404,8 @@ def hourly_update_characters():
         
     result = execute_query("SELECT * FROM characters")
     all_chars = result
+    num_results = len(all_chars)
+    logger.info(f"При обновлении персонажей найдено {num_results} записей")
         
     # Проверяем, есть ли созданные персонажи
     if not all_chars:
