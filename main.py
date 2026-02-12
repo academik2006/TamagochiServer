@@ -51,8 +51,9 @@ def handle_game_rules(message):
 @bot.message_handler(func=lambda message: message.text == 'Сколько до финиша')
 def handle_time_left(message):            
     last_time_message = get_time_to_win(message)
+    username = message.from_user.username or 'UnknownUser'  # Берём username, если есть, иначе используем UnknownUser
     bot.send_message(message.chat.id, last_time_message, parse_mode="HTML", reply_markup=create_keyboard_for_continue())
-    logger.info(f"Бот успешно отправил пользователю {message.chat.id} сколько до финиша")
+    logger.info(f"Бот успешно отправил пользователю {message.chat.id} - {username} сколько до финиша")
 
 def add_user_on_start(message):        
     user_id = message.from_user.id
@@ -639,17 +640,15 @@ def run_timer():
     while True:
         current_time = datetime.now()
         hour = current_time.hour                
-        # Работаем только с 9:00 до 22:00
-        #if 5 <= hour < 23:
-        #    logger.info(f"Время в основном таймере {current_time}")            
-        #    hourly_update_characters()            
-        #    time.sleep(3600)  # Ждем ровно 1 час (3600 секунд)            
-        #else:
-        #    logger.info(f"Время в маленьком таймере  {current_time}")            
-        #    time.sleep(60)        
-        logger.info(f"Время в основном таймере {current_time}, часы = {hour}")            
-        hourly_update_characters()            
-        time.sleep(3600)  # Ждем ровно 1 час (3600 секунд)            
+        #Работаем только с 7:00 до 22:00
+        if 7 <= hour < 22:
+            logger.info(f"Время в основном таймере {current_time}")            
+            #hourly_update_characters()            
+            time.sleep(3600)  # Ждем ровно 1 час (3600 секунд)            
+        else:
+            logger.info(f"Время в маленьком таймере  {current_time}")            
+            time.sleep(600) # Просыпаемся раз в 10 минут для проверки интервала (600 секунд)                   
+        
 
 # Запускаем таймер в отдельном потоке
 timer_thread = Thread(target=run_timer)
