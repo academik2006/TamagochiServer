@@ -426,7 +426,7 @@ def hourly_update_characters():
 
         check_total_state(user_id,char_id,name,gender,max(new_total_state,0),standart_photo_number)        
         hours_left = check_character_old(user_id, char_id, created_at,gender)
-        logger.info(f"hours_left = {hours_left}")
+        logger.info(f" hourly_update_characters run for user {user_id}, hours_left = {hours_left}, total_state = {total_state}")
 
         # Если персонаж старше требуемого времени, выдаём награду
         if hours_left < 1:
@@ -502,11 +502,8 @@ def replace_avatar_foto_in_db(user_id, gender, standart_photo_number, level, new
 def check_character_old(user_id, char_id, created_at_str, gender):
     # Парсим timestamp из строки
         created_at = datetime.strptime(created_at_str.split('.')[0], "%Y-%m-%d %H:%M:%S")
-        logger.info(f"Время после парсинга {created_at}")
-
         # Текущее время минус HOURS_SHIFT_SERVER часов (для компенсации разницы)
-        now_adjusted = datetime.now() - timedelta(hours=HOURS_SHIFT_SERVER)
-        logger.info(f"Текущее время (скорректированное) {now_adjusted}")
+        now_adjusted = datetime.now() - timedelta(hours=HOURS_SHIFT_SERVER)     
 
         # Время необходимое для возможности выиграть (переводим дни в часы)
         required_time = timedelta(hours=HOURS_TO_WIN)
@@ -596,13 +593,13 @@ def check_money_need(user_id, gender, money_need):
 def run_timer():
     while True:
         current_time = datetime.now()
-        hour = current_time.hour        
+        hour = current_time.hour                
         # Работаем только с 9:00 до 22:00
-        if 9 <= hour < 22:
+        if 7 <= hour < 23:            
             hourly_update_characters()            
             time.sleep(3600)  # Ждем ровно 1 час (3600 секунд)            
         else:
-            time.sleep(60)  
+            time.sleep(60)        
 
 # Запускаем таймер в отдельном потоке
 timer_thread = Thread(target=run_timer)
