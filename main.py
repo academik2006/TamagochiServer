@@ -1,3 +1,4 @@
+import math
 import os
 import re
 from telebot import types
@@ -433,7 +434,53 @@ def hourly_update_characters():
 
         # Если персонаж старше требуемого времени, выдаём награду
         if hours_left < 1:
-            win(user_id, char_id, gender)                    
+            win(user_id, char_id, gender)  
+
+def hourly_update_characters_chanked():
+    result = execute_query("SELECT * FROM characters")
+    all_chars = result
+    num_results = len(all_chars)
+    logger.info(f"При обновлении персонажей найдено {num_results} записей")
+
+    # Проверяем, есть ли созданные персонажи
+    if not all_chars:
+        print("Активных персонажей нет")
+        return
+    
+    CHUNK_SIZE = math.ceil(num_results / 20)  # Округляем вверх
+    INTERVAL_SECONDS = 60  # Интервал между партиями в секундах (1 минута)    
+
+    # Начинаем обработку партиями
+    for i in range(0, len(all_chars), CHUNK_SIZE):
+        chars_batch = all_chars[i:i + CHUNK_SIZE]
+        
+        for char_id, user_id, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, created_at in chars_batch:
+            
+            logger.info(f"Стартовала отправка порции сообщений {datetime.now()}")            
+
+            hunger -= 10
+            fatigue -= 5
+            entertain -= 7
+            money_need -= 6
+
+            new_total_state = calculate_total_state(hunger, fatigue, entertain, money_need)
+            update_character_stats(max(hunger, 0), max(fatigue, 0), max(entertain, 0), max(money_need, 0), max(new_total_state, 0), char_id)
+
+            check_hunger(user_id, gender, hunger)
+            check_entertain(user_id, gender, hunger)
+            check_fatigue(user_id, gender, hunger)
+            check_money_need(user_id, gender, hunger)
+
+            check_total_state(user_id, char_id, name, gender, max(new_total_state, 0), standart_photo_number)
+            hours_left = check_character_old(user_id, char_id, created_at, gender)
+            logger.info(f"hourly_update_characters run for user {user_id}, hours_left = {hours_left}, total_state = {total_state}")
+
+            # Если персонаж старше требуемого времени, выдаём награду
+            if hours_left < 1:
+                win(user_id, char_id, gender)
+
+        # Пауза между партиями (1 минута)
+        time.sleep(INTERVAL_SECONDS)                              
         
 
 def calculate_total_state(hunger, fatigue, entertain, money_need):
@@ -643,7 +690,8 @@ def run_timer():
         #Работаем только с 7:00 до 22:00
         if 7 <= hour < 22:
             logger.info(f"Время в основном таймере {current_time}")            
-            hourly_update_characters()            
+            #hourly_update_characters()            
+            hourly_update_characters_chanked()
             time.sleep(3600)  # Ждем ровно 1 час (3600 секунд)            
         else:
             logger.info(f"Время в маленьком таймере  {current_time}")            
