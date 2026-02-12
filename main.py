@@ -595,10 +595,12 @@ def run_timer():
         current_time = datetime.now()
         hour = current_time.hour                
         # Работаем только с 9:00 до 22:00
-        if 7 <= hour < 23:            
+        if 7 <= hour < 23:
+            logger.info(f"Время в основном таймере {current_time}")            
             hourly_update_characters()            
             time.sleep(3600)  # Ждем ровно 1 час (3600 секунд)            
         else:
+            logger.info(f"Время в маленьком таймере  {current_time}")            
             time.sleep(60)        
 
 # Запускаем таймер в отдельном потоке
