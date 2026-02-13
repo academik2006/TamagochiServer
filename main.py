@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 # Словарь для временного хранения данных пользователей
 user_data = {}
+blocked_users = set()
 
 async def main():    
     logger.info("Бот запущен")
@@ -326,14 +327,27 @@ def generate_image_with_progress_bars(user_id, name, hunger, fatigue, entertain,
     font = ImageFont.truetype("commissioner_bold.ttf", size=font_size)
     draw = ImageDraw.Draw(background_img)
 
-    # Получаем размер текста
-    text_w, _ = font.getbbox(name)[2:]  # Использование getbbox для современных версий Pillow
+    # Получаем размер текста с помощью getbbox
+    text_rect = font.getbbox(name)
+
+    if text_rect is not None:
+        text_w = text_rect[2] - text_rect[0]
+        text_h = text_rect[3] - text_rect[1]
+    else:
+        # Если getbbox не смог определить размеры, используем textsize
+        text_w, text_h = draw.textsize(name, font=font)
+
+    # Если и textsize вернул None, задаём минимальный размер
+    if text_w is None or text_h is None:
+        text_w, text_h = 8, 8
 
     # Центрируем текст по ширине
     text_position = (
-        (background_img.width - text_w) // 2,  # Центрирование по горизонтали
-        y_avatar - 90                         # Оставляем прежнюю вертикальную позицию
+    (background_img.width - text_w) // 2,  # Центрирование по горизонтали
+    y_avatar - 90                         # Оставляем прежнюю вертикальную позицию
     )
+
+    # Отображаем текст
     draw.text(text_position, name, font=font, fill="#C11719")
     
     # Применяем функцию рисования шкал
@@ -401,41 +415,6 @@ def check_character_and_send_status(user_id):
         else:
             send_character_image_with_progress(user_id, img_bytes,keyboard)        
    
-
-def hourly_update_characters():   
-        
-    result = execute_query("SELECT * FROM characters")
-    all_chars = result
-    num_results = len(all_chars)
-    logger.info(f"При обновлении персонажей найдено {num_results} записей")
-        
-    # Проверяем, есть ли созданные персонажи
-    if not all_chars:
-        print("Активных персонажей нет")
-        return 
-        
-    for char_id, user_id, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number,created_at in all_chars:
-        hunger -= 10
-        fatigue -= 5
-        entertain -= 7
-        money_need -= 6
-        
-        new_total_state = calculate_total_state(hunger, fatigue, entertain, money_need)        
-        update_character_stats(max(hunger,0), max(fatigue,0), max(entertain,0), max(money_need,0), max(new_total_state,0), char_id)     
-
-        check_hunger(user_id,gender,hunger)
-        check_entertain(user_id,gender,hunger)
-        check_fatigue(user_id,gender,hunger)
-        check_money_need(user_id,gender,hunger)
-
-        check_total_state(user_id,char_id,name,gender,max(new_total_state,0),standart_photo_number)        
-        hours_left = check_character_old(user_id, char_id, created_at,gender)
-        logger.info(f" hourly_update_characters run for user {user_id}, hours_left = {hours_left}, total_state = {total_state}")
-
-        # Если персонаж старше требуемого времени, выдаём награду
-        if hours_left < 1:
-            win(user_id, char_id, gender)  
-
 def hourly_update_characters_chanked():
     result = execute_query("SELECT * FROM characters")
     all_chars = result
@@ -455,6 +434,10 @@ def hourly_update_characters_chanked():
         chars_batch = all_chars[i:i + CHUNK_SIZE]
         
         for char_id, user_id, name, gender, _, hunger, fatigue, entertain, money_need, total_state, standart_photo_number, created_at in chars_batch:
+
+            # Пропускаем заблокированного пользователя
+            if user_id in blocked_users:
+                continue
             
             logger.info(f"Стартовала отправка порции сообщений {datetime.now()}")            
 
@@ -501,9 +484,13 @@ def check_total_state(user_id, char_id, name, gender, new_total_state,standart_p
             ]
             replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 2, new_total_state)
             try:
-                bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")
+                bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")            
             except Exception as e:
-                logger.warning(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+                if 'User has blocked this bot' in str(e):
+                    blocked_users.add(user_id)
+                    logger.warning(f"Пользователь {user_id} заблокировал бота.")
+                else:                
+                    logger.warning(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
             
         elif new_total_state <= STATE_YELLOW_UPPER_BOUND:
             phrases = [
@@ -515,7 +502,11 @@ def check_total_state(user_id, char_id, name, gender, new_total_state,standart_p
             try:
                 bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")
             except Exception as e:
-                logger.warning(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+                if 'User has blocked this bot' in str(e):
+                    blocked_users.add(user_id)
+                    logger.warning(f"Пользователь {user_id} заблокировал бота.")
+                else:                
+                    logger.warning(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
         elif new_total_state <= STATE_GREEN_LOWER_BOUND:
             phrases = [
             "Хмм… кажется, у нас тут легкий эмоциональный сквозняк.\nНичего критичного, но лучше заглянуть.",
@@ -526,7 +517,11 @@ def check_total_state(user_id, char_id, name, gender, new_total_state,standart_p
             try:
                 bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")
             except Exception as e:
-                logger.warning(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+                if 'User has blocked this bot' in str(e):
+                    blocked_users.add(user_id)
+                    logger.warning(f"Пользователь {user_id} заблокировал бота.")
+                else:                
+                    logger.warning(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
         else:
             replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 0, new_total_state)
 
@@ -609,7 +604,11 @@ def win(user_id, char_id, gender):
         # Попытка отправки текста поздравления
         bot.send_message(user_id, congratulation_text, reply_markup=create_keyboard_for_new_user(), parse_mode="HTML")
     except Exception as e:
-        logger.warning(f"Ошибка при отправке поздравления пользователю {user_id}: {e}")  
+            if 'User has blocked this bot' in str(e):
+                blocked_users.add(user_id)
+                logger.warning(f"Пользователь {user_id} заблокировал бота.")
+            else:
+                logger.warning(f"Ошибка при отправке поздравления пользователю {user_id}: {e}")                 
     
 
 def lose(user_id, char_id, gender):
@@ -626,10 +625,13 @@ def lose(user_id, char_id, gender):
                   caption=fail_text,
                   reply_markup=create_keyboard_for_new_user(),
                   parse_mode="HTML"
-              )
+              )                
       except Exception as e:
-          # Логируем событие, если отправка не удалась
-          logger.warning(f"Ошибка при отправке фотографии проигрыша пользователю {user_id}: {e}")          
+                if 'User has blocked this bot' in str(e):
+                    blocked_users.add(user_id)
+                    logger.warning(f"Пользователь {user_id} заблокировал бота.")
+                else:
+                    logger.warning(f"Ошибка при отправке фотографии проигрыша пользователю {user_id}: {e}")       
 
 
 def check_hunger(user_id, gender, hunger):
@@ -643,7 +645,11 @@ def check_hunger(user_id, gender, hunger):
         try:        
           bot.send_message(user_id, message, parse_mode="HTML")
         except Exception as e:
-          logger.warning(f"Попытка отправить сообщение пользователю {user_id} завершилась неудачей: {e}")    
+                if 'User has blocked this bot' in str(e):
+                    blocked_users.add(user_id)
+                    logger.warning(f"Пользователь {user_id} заблокировал бота.")
+                else:
+                    logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
         
 
 def check_fatigue(user_id, gender, fatigue):
@@ -656,7 +662,11 @@ def check_fatigue(user_id, gender, fatigue):
         try:        
           bot.send_message(user_id, message, parse_mode="HTML")
         except Exception as e:
-          logger.warning(f"Попытка отправить сообщение пользователю {user_id} завершилась неудачей: {e}")    
+                if 'User has blocked this bot' in str(e):
+                    blocked_users.add(user_id)
+                    logger.warning(f"Пользователь {user_id} заблокировал бота.")
+                else:
+                    logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")    
 
 def check_entertain(user_id, gender, entertain):
     if entertain <= 40:
@@ -668,7 +678,11 @@ def check_entertain(user_id, gender, entertain):
         try:        
           bot.send_message(user_id, message, parse_mode="HTML")
         except Exception as e:
-          logger.warning(f"Попытка отправить сообщение пользователю {user_id} завершилась неудачей: {e}")    
+                if 'User has blocked this bot' in str(e):
+                    blocked_users.add(user_id)
+                    logger.warning(f"Пользователь {user_id} заблокировал бота.")
+                else:
+                    logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")    
 
 def check_money_need(user_id, gender, money_need):
     if money_need < 55:
@@ -680,7 +694,11 @@ def check_money_need(user_id, gender, money_need):
         try:        
           bot.send_message(user_id, message, parse_mode="HTML")
         except Exception as e:
-          logger.warning(f"Попытка отправить сообщение пользователю {user_id} завершилась неудачей: {e}")    
+                if 'User has blocked this bot' in str(e):
+                    blocked_users.add(user_id)
+                    logger.warning(f"Пользователь {user_id} заблокировал бота.")
+                else:
+                    logger.error(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")    
             
 
 def run_timer():
@@ -689,8 +707,7 @@ def run_timer():
         hour = current_time.hour                
         #Работаем только с 7:00 до 22:00
         if 7 <= hour < 22:
-            logger.info(f"Время в основном таймере {current_time}")            
-            #hourly_update_characters()            
+            logger.info(f"Время в основном таймере {current_time}")                        
             hourly_update_characters_chanked()
             time.sleep(3600)  # Ждем ровно 1 час (3600 секунд)            
         else:
