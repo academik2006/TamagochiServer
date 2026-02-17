@@ -483,14 +483,7 @@ def check_total_state(user_id, char_id, name, gender, new_total_state,standart_p
             "Мы почти на грани.Я серьезно."            
             ]
             replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 2, new_total_state)
-            try:
-                bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")            
-            except Exception as e:
-                if 'User has blocked this bot' in str(e):
-                    blocked_users.add(user_id)
-                    logger.warning(f"Пользователь {user_id} заблокировал бота.")
-                else:                
-                    logger.warning(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+            send_total_state_status_message(random.choice(phrases))
             
         elif new_total_state <= STATE_YELLOW_UPPER_BOUND:
             phrases = [
@@ -499,14 +492,8 @@ def check_total_state(user_id, char_id, name, gender, new_total_state,standart_p
             "Так… у нас тут уже не идеально. Я начинаю чувствовать себя одиноко."
             ]
             replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1, new_total_state)
-            try:
-                bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")
-            except Exception as e:
-                if 'User has blocked this bot' in str(e):
-                    blocked_users.add(user_id)
-                    logger.warning(f"Пользователь {user_id} заблокировал бота.")
-                else:                
-                    logger.warning(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+            send_total_state_status_message(random.choice(phrases))
+            
         elif new_total_state <= STATE_GREEN_LOWER_BOUND:
             phrases = [
             "Хмм… кажется, у нас тут легкий эмоциональный сквозняк.\nНичего критичного, но лучше заглянуть.",
@@ -514,16 +501,20 @@ def check_total_state(user_id, char_id, name, gender, new_total_state,standart_p
             "Мне вроде нормально. Но с тобой было бы лучше 😢"
             ]
             replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 1, new_total_state)
-            try:
-                bot.send_message(user_id, random.choice(phrases), reply_markup=create_keyboard_for_continue(), parse_mode="HTML")
-            except Exception as e:
-                if 'User has blocked this bot' in str(e):
-                    blocked_users.add(user_id)
-                    logger.warning(f"Пользователь {user_id} заблокировал бота.")
-                else:                
-                    logger.warning(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
+            send_total_state_status_message(random.choice(phrases))
+            
         else:
             replace_avatar_foto_in_db(user_id, gender, standart_photo_number, 0, new_total_state)
+
+def send_total_state_status_message (user_id,message):
+    try:
+        bot.send_message(user_id, message, reply_markup=create_keyboard_for_continue(), parse_mode="HTML")
+    except Exception as e:
+        if 'User has blocked this bot' in str(e):
+            blocked_users.add(user_id)
+            logger.warning(f"Пользователь {user_id} заблокировал бота.")
+        else:                
+            logger.warning(f"Ошибка при отправке сообщения пользователю {user_id}: {e}")
 
 
 
